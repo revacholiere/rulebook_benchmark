@@ -25,6 +25,6 @@ dependencies = [
 	"progressbar2 ~= 3.53",
 	"networkx >= 2.6",
 	"statsmodels >= 0.13.2",
-	"carla ~= 0.9.12",
+	'carla >= 0.9.12; python_version <= "3.10" and (platform_system == "Linux" or platform_system == "Windows")',
 ]
 
