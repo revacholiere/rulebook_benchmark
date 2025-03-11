@@ -1,7 +1,7 @@
 from trimesh.transformations import compose_matrix
 from scenic.core.regions import MeshVolumeRegion, EmptyRegion
 import shapely
-from realization import Realization
+from rulebook_benchmark.realization import Realization
 """
 keys of realization: 
 network: scenic object for road network
@@ -157,7 +157,7 @@ def vru_clearance_off_road(realization, start_index=None, end_index=None):
 
                 
                 
-def vru_acknowledgement(realization, proximity=5, threshold=0.2,  timesteps=10, start_index=None, end_index=None):
+def vru_acknowledgement(realization, proximity=100, threshold=5,  timesteps=10, start_index=None, end_index=None):
     if start_index is None:
         start_index = 0
     

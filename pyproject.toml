@@ -1,7 +1,7 @@
 [project]
 name = "rulebook_benchmark"
 version = "0.1.0"
-description = "A toolkit for the formal design and analysis of systems that include artificial intelligence (AI) and machine learning (ML) components."
+description = "A library for rulebook-based benchmarking using Scenic."
 
 readme = "README.md"
 requires-python = ">=3.8"
