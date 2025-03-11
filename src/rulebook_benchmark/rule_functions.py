@@ -147,17 +147,17 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
 
 
 
-def vru_clearance_on_road(realization, start_index=None, end_index=None):
-    return vru_clearance(realization, on_road=True, start_index=start_index, end_index=end_index)
+def vru_clearance_on_road(realization, start_index=None, end_index=None, threshold = 2):
+    return vru_clearance(realization, on_road=True, start_index=start_index, end_index=end_index, threshold = threshold)
 
 
-def vru_clearance_off_road(realization, start_index=None, end_index=None):
-    return vru_clearance(realization, on_road=False, start_index=start_index, end_index=end_index)
+def vru_clearance_off_road(realization, start_index=None, end_index=None, threshold = 2):
+    return vru_clearance(realization, on_road=False, start_index=start_index, end_index=end_index, threshold = threshold)
 
 
                 
                 
-def vru_acknowledgement(realization, proximity=100, threshold=5,  timesteps=10, start_index=None, end_index=None):
+def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, start_index=None, end_index=None):
     if start_index is None:
         start_index = 0
     

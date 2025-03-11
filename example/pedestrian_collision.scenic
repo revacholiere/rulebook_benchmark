@@ -16,7 +16,7 @@ behavior do_nothing():
  
 ego = new Car with behavior FollowLaneBehavior()
 spot = new OrientedPoint at ego offset by 3 @ 50
-ped = new Pedestrian at spot, with behavior CrossingBehavior(ego, threshold=100, min_speed=2)
+ped = new Pedestrian at spot, with behavior CrossingBehavior(ego, threshold=100, min_speed=1)
 
 
 from rulebook_benchmark import bench
