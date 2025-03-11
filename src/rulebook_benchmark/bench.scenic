@@ -1,6 +1,6 @@
 from scenic.domains.driving.roads import Network
 model scenic.simulators.carla.model
-from realization import Realization, RealizationObject, State
+from rulebook_benchmark.realization import Realization, RealizationObject, State
 
 behavior bench():
 
