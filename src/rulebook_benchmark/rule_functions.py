@@ -2,21 +2,7 @@ from trimesh.transformations import compose_matrix
 from scenic.core.regions import MeshVolumeRegion, EmptyRegion
 import shapely
 from rulebook_benchmark.realization import Realization
-"""
-keys of realization: 
-network: scenic object for road network
-max_steps
-mesh: meshes for each object in the scene (trimesh)
-object_type: type of each object in the scene ('Person', 'Car'...)
-trajectory: list of dictionaries, where each dictionary contains the state information
 
-keys of each state in trajectory:
-position: list of positions of each object [(x, y, z), (x, y, z)...]
-orientation: list of orientations of each object [(yaw, pitch, roll, w), (yaw, pitch, roll, w)...]
-orientation_trimesh: " " [(yaw, pitch, roll), (yaw, pitch, roll)...]
-velocity: list of velocities of each object [(x, y, z), (x, y, z)...]
-step: corresponding timestep
-"""
 
 # TODO: maybe add a generalized rule loop function that takes a rule and start-end time
 # TODO: shapely vs scenic distances , same for velocity/acceleration scale
