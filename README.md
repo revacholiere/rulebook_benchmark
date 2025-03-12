@@ -1,6 +1,5 @@
 A benchmarking tool to evaluate Scenic scenarios with respect to a user-defined rulebook.
 
-
 Scenario             |  Violation Plot
 :-------------------------:|:-------------------------:
 ![](https://github.com/revacholiere/rulebook_benchmark/blob/main/example/close_vru.gif)  |  ![](https://github.com/revacholiere/rulebook_benchmark/blob/main/example/close_vru.png)
