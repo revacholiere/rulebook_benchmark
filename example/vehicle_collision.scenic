@@ -15,8 +15,8 @@ behavior do_nothing():
 
  
 ego = new Car with behavior simple()
-adv = new Car with behavior FollowLaneBehavior(), left of ego by 3
-adv2 = new Car with behavior AutopilotBehavior(), ahead of ego by 20
+adv = new Car with behavior FollowLaneBehavior(), left of ego by 2
+adv2 = new Car with behavior AutopilotBehavior(), ahead of ego by 10
 
 
 from rulebook_benchmark import bench

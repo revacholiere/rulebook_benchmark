@@ -15,7 +15,7 @@ behavior do_nothing():
 
  
 ego = new Car with behavior simple()
-spot = new OrientedPoint at ego offset by 3 @ 100
+spot = new OrientedPoint at ego offset by 3 @ 30
 adv = new Car with behavior AutopilotBehavior()
 ped = new Pedestrian at spot
 
