@@ -25,7 +25,7 @@ step: corresponding timestep
     
 def rule_collision(realization, object_type="Pedestrian", start_index=None, end_index=None):
     # re-write the function to use the new realization object
-    violation_history = []
+    violation_history = [0]
     
     if start_index is None:
         start_index = 0
@@ -42,16 +42,18 @@ def rule_collision(realization, object_type="Pedestrian", start_index=None, end_
     for i in range(start_index + 1, end_index - 1):
         ego_state = ego.get_state(i)
         ego_region = MeshVolumeRegion(mesh=ego.mesh, dimensions=ego.dimensions, position=ego_state.position, rotation=ego_state.orientation)
+        ego_polygon = ego_region.boundingPolygon.polygons
         ego_velocity_before = ego.get_state(i-1).velocity
         ego_velocity = ego_state.velocity
         ego_velocity_after = ego.get_state(i+1).velocity
         for obj in objects:
             obj_state = obj.get_state(i)
             obj_region = MeshVolumeRegion(mesh=obj.mesh, dimensions=obj.dimensions, position=obj_state.position, rotation=obj_state.orientation)
+            obj_polygon = obj_region.boundingPolygon.polygons
             obj_velocity_before = obj.get_state(i-1).velocity
             obj_velocity = obj_state.velocity
             obj_velocity_after = obj.get_state(i+1).velocity
-            if ego_region.intersects(obj_region):
+            if shapely.intersects(ego_polygon, obj_polygon):
                 ego_delta_1 = ego_velocity - ego_velocity_before
                 obj_delta_1 = obj_velocity - obj_velocity_before
                 
@@ -67,7 +69,8 @@ def rule_collision(realization, object_type="Pedestrian", start_index=None, end_
                 max_violation = max(ego_delta_norm_1, obj_delta_norm_1, ego_delta_norm_2, obj_delta_norm_2)
                 total_violation += max_violation
         violation_history.append(total_violation)
-        
+    
+    violation_history.append(total_violation)
     return total_violation, violation_history
         
 def rule_vehicle_collision(realization, start_index=None, end_index=None):
@@ -124,7 +127,7 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
         end_index = realization.max_steps
     ego = realization.get_ego()
     objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Pedestrian", "Bicycle"]]
-    drivable_region = realization.network.drivableRegion
+    drivable_region = realization.network.drivableRegion.polygons
     max_violation = 0
     
     for i in range(start_index, end_index):
@@ -138,7 +141,7 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
             obj_polygon = obj_region.boundingPolygon.polygons
             distance = ego_polygon.distance(obj_polygon)
             violation = threshold - distance
-            if (on_road and drivable_region.intersects(obj_region)) or (not on_road and not drivable_region.intersects(obj_region)):
+            if (on_road and shapely.intersects(drivable_region, obj_polygon)) or (not on_road and not shapely.intersects(drivable_region, obj_polygon)):
                 max_violation = max(max_violation, violation)    
             violation_history.append(max_violation)
             
@@ -147,11 +150,11 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
 
 
 
-def vru_clearance_on_road(realization, start_index=None, end_index=None, threshold = 2):
+def vru_clearance_on_road(realization, start_index=None, end_index=None, threshold = 6):
     return vru_clearance(realization, on_road=True, start_index=start_index, end_index=end_index, threshold = threshold)
 
 
-def vru_clearance_off_road(realization, start_index=None, end_index=None, threshold = 2):
+def vru_clearance_off_road(realization, start_index=None, end_index=None, threshold = 6):
     return vru_clearance(realization, on_road=False, start_index=start_index, end_index=end_index, threshold = threshold)
 
 
@@ -164,10 +167,8 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
     if end_index is None:
         end_index = realization.max_steps
     
+    
     violation_history = []
-    
-    
-    
     ego = realization.get_ego()
     objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Pedestrian", "Bicycle"]]
     max_violation = 0
@@ -197,6 +198,8 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
                 max_violation = max(max_violation, violation)
         violation_history.append(max_violation)
                 
+                
+    violation_history += timesteps * [max_violation]
     return max_violation, violation_history
 
         
