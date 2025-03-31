@@ -169,11 +169,12 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
         ego_future_pos = ego_future_state.position
         for obj in objects:
             adv_current_pos = obj.get_state(i).position
-            # ego vector to adv vehicle
+            ego_future_region = MeshVolumeRegion(mesh=ego.mesh, dimensions=ego.dimensions, position=ego_future_pos, rotation=ego_future_state.orientation)
+            ego_future_polygon = ego_future_region.boundingPolygon.polygons
+            adv_current_region = MeshVolumeRegion(mesh=obj.mesh, dimensions=obj.dimensions, position=adv_current_pos, rotation=obj_state.orientation)
+            adv_current_polygon = adv_current_region.boundingPolygon.polygons
             
-            # ego velocity vector towards adv vehicle
-            
-            distance = (ego_future_pos - adv_current_pos).norm()
+            distance = shapely.distance(ego_future_polygon, adv_current_polygon)
             if distance < proximity:
                 vec = adv_current_pos - ego_future_pos
                 ego_velocity_to_adv = (ego_velocity.dot(vec)/vec.norm()**2) * vec
@@ -194,3 +195,7 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
         
 
 # TODO: vehicle yielding rule based on adv vehicle decelerations
+
+
+
+
