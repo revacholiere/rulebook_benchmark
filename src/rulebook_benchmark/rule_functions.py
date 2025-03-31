@@ -2,7 +2,7 @@ from trimesh.transformations import compose_matrix
 from scenic.core.regions import MeshVolumeRegion, EmptyRegion
 import shapely
 from rulebook_benchmark.realization import Realization
-
+import math
 
 # TODO: maybe add a generalized rule loop function that takes a rule and start-end time
 # TODO: shapely vs scenic distances , same for velocity/acceleration scale
@@ -198,7 +198,7 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
 # TODO: vehicle yielding rule based on adv vehicle decelerations
 
 
-
+'''
 
 def stay_on_the_correct_side(realization, start_index=None, end_index=None):
     violation_history = []
@@ -218,6 +218,19 @@ def stay_on_the_correct_side(realization, start_index=None, end_index=None):
         state = ego.get_state(i)
         ego_region = MeshVolumeRegion(mesh=ego.mesh, dimensions=ego.dimensions, position=state.position, rotation=state.orientation)
         ego_polygon = ego_region.boundingPolygon.polygons
+        ego_road_orientation_field = network.roadAt(state.position).orientation
+        ego_road_yaw = ego_road_orientation_field.value(state.position).yaw
+        ego_yaw = state.orientation.yaw
+        
+        difference = abs(ego_yaw - ego_road_yaw)
+
+        if difference > math.pi/2: # wrong direction
+            max_violation = 0
+            
+             
+
         
         
     return max_violation, violation_history
+    
+'''

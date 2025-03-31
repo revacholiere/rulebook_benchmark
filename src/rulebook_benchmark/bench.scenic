@@ -1,9 +1,8 @@
 from scenic.domains.driving.roads import Network
-model scenic.simulators.carla.model
+model scenic.domains.driving.model
 from rulebook_benchmark.realization import Realization, RealizationObject, State
 
-behavior bench():
-
+monitor bench():
     realization = globalParameters['realization']
     realization.network = Network.fromFile(globalParameters['map'])
 
@@ -15,17 +14,14 @@ behavior bench():
     realization.objects = objs
 
     step = 0
-    while step < max_steps:
+    while True:
         objects = simulation().objects[:-1]
 
         for i in range(len(objects)):
             obj = realization.objects[i]
             object = objects[i]
             obj.trajectory.append(State(object.position, object.velocity, object.orientation, step))
-
         step += 1
-
         wait
 
 
-BENCH_OBJ = new Bench with behavior bench()

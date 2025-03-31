@@ -24,3 +24,4 @@ ped = new Pedestrian at spot, with behavior CrossingBehavior(ego, threshold=100,
 
 
 from rulebook_benchmark import bench
+require monitor bench.bench()
