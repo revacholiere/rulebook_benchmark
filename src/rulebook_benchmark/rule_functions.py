@@ -168,10 +168,11 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
         ego_next_velocity = ego_future_state.velocity
         ego_future_pos = ego_future_state.position
         for obj in objects:
-            adv_current_pos = obj.get_state(i).position
+            adv_current_state = obj.get_state(i)
+            adv_current_pos = adv_current_state.position
             ego_future_region = MeshVolumeRegion(mesh=ego.mesh, dimensions=ego.dimensions, position=ego_future_pos, rotation=ego_future_state.orientation)
             ego_future_polygon = ego_future_region.boundingPolygon.polygons
-            adv_current_region = MeshVolumeRegion(mesh=obj.mesh, dimensions=obj.dimensions, position=adv_current_pos, rotation=obj_state.orientation)
+            adv_current_region = MeshVolumeRegion(mesh=obj.mesh, dimensions=obj.dimensions, position=adv_current_pos, rotation=adv_current_state.orientation)
             adv_current_polygon = adv_current_region.boundingPolygon.polygons
             
             distance = shapely.distance(ego_future_polygon, adv_current_polygon)
@@ -199,3 +200,24 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
 
 
 
+def stay_on_the_correct_side(realization, start_index=None, end_index=None):
+    violation_history = []
+    if start_index is None:
+        start_index = 0
+
+    max_steps = realization.max_steps
+    
+    if end_index is None:
+        end_index = max_steps
+        
+    network = realization.network
+    ego = realization.get_ego()
+    max_violation = 0
+    
+    for i in range(start_index, end_index):
+        state = ego.get_state(i)
+        ego_region = MeshVolumeRegion(mesh=ego.mesh, dimensions=ego.dimensions, position=state.position, rotation=state.orientation)
+        ego_polygon = ego_region.boundingPolygon.polygons
+        
+        
+    return max_violation, violation_history
