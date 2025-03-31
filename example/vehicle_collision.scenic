@@ -20,3 +20,4 @@ adv2 = new Car with behavior AutopilotBehavior(), ahead of ego by 10
 
 
 from rulebook_benchmark import bench
+require monitor bench.bench()

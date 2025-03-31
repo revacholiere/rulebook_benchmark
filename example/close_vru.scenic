@@ -21,3 +21,4 @@ ped = new Pedestrian at spot
 
 
 from rulebook_benchmark import bench
+require monitor bench.bench()
