@@ -3,9 +3,58 @@ from scenic.core.regions import MeshVolumeRegion, EmptyRegion
 import shapely
 from rulebook_benchmark.realization import Realization
 import math
+from scenic.core.vectors import Vector
 
 # TODO: maybe add a generalized rule loop function that takes a rule and start-end time
 # TODO: shapely vs scenic distances , same for velocity/acceleration scale
+
+
+class Result:
+    def __init__(self, minimum_violation=0, aggregation_method=max):
+        self.total_violation = minimum_violation
+        self.violation_history = []
+        self.aggregation_method = aggregation_method
+    def add(self, violation):
+        self.total_violation = self.aggregation_method((self.total_violation, violation))
+        self.violation_history.append(self.total_violation)
+    def __repr__(self):
+        return f"Result(total_violation={self.total_violation}, history={self.violation_history})"
+    def __str__(self):
+        return f"Result(total_violation={self.total_violation}, history={self.violation_history})"
+
+def rule_function(calculate_violation, aggregation_method):
+    """
+    A decorator to apply a rule function to a realization.
+    :param calculate_violation: The function that calculates the violation.
+    :param aggregate_violations: The function that aggregates the violations.
+    :param realization: The realization object.
+    :param start_index: The start index for the calculation.
+    :param end_index: The end index for the calculation.
+    :return: The total violation and the history of violations.
+    """
+    
+    def wrapper(realization, start_index=None, end_index=None, parameters={}):
+        result = Result(aggregation_method=aggregation_method)
+        if start_index is None:
+            start_index = 0
+        
+        result.violation_history += [0] * start_index
+        max_steps = realization.max_steps
+        
+        if end_index is None:
+            end_index = max_steps
+            
+        violation_score = 0
+        for i in range(start_index, end_index):
+            violation_score = calculate_violation(realization=realization, step=i, **parameters)
+            result.add(violation_score)
+                    
+        result.violation_history += [result.total_violation] * (max_steps - end_index)
+        return result
+    
+    return wrapper
+    
+
 
     
     
@@ -52,8 +101,8 @@ def rule_collision(realization, object_type="Pedestrian", start_index=None, end_
                 obj_delta_norm_2 = obj_delta_2.norm()
                 
                 
-                max_violation = max(ego_delta_norm_1, obj_delta_norm_1, ego_delta_norm_2, obj_delta_norm_2)
-                total_violation += max_violation
+                violation_score = max(ego_delta_norm_1, obj_delta_norm_1, ego_delta_norm_2, obj_delta_norm_2)
+                total_violation += violation_score
         violation_history.append(total_violation)
     
     violation_history.append(total_violation)
@@ -85,7 +134,7 @@ def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
     network = realization.network
     drivable_region = network.drivableRegion
     ego = realization.get_ego()
-    max_violation = 0
+    violation_score = 0
     
     for i in range(start_index, end_index):
         state = ego.get_state(i)
@@ -96,10 +145,10 @@ def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
         difference_area = difference.area
         distance = shapely.distance(drivable_polygon, ego_polygon)
         violation = difference_area + distance**2
-        max_violation = max(max_violation, violation)
-        violation_history.append(max_violation)
+        violation_score = max(violation_score, violation)
+        violation_history.append(violation_score)
         
-    return max_violation, violation_history
+    return violation_score, violation_history
 
 
 
@@ -114,7 +163,7 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
     ego = realization.get_ego()
     objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Pedestrian", "Bicycle"]]
     drivable_region = realization.network.drivableRegion.polygons
-    max_violation = 0
+    violation_score = 0
     
     for i in range(start_index, end_index):
         state = ego.get_state(i)
@@ -128,10 +177,10 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
             distance = ego_polygon.distance(obj_polygon)
             violation = threshold - distance
             if (on_road and shapely.intersects(drivable_region, obj_polygon)) or (not on_road and not shapely.intersects(drivable_region, obj_polygon)):
-                max_violation = max(max_violation, violation)    
-            violation_history.append(max_violation)
+                violation_score = max(violation_score, violation)    
+            violation_history.append(violation_score)
             
-    return max_violation, violation_history
+    return violation_score, violation_history
     
 
 
@@ -157,7 +206,7 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
     violation_history = []
     ego = realization.get_ego()
     objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Pedestrian", "Bicycle"]]
-    max_violation = 0
+    violation_score = 0
     
     #TODO change to dot product projection of velocity
     
@@ -183,12 +232,12 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
                 ego_velocity_to_adv_norm = ego_velocity_to_adv.norm()
                 ego_next_velocity_to_adv_norm = ego_next_velocity_to_adv.norm()
                 violation = threshold - (ego_velocity_to_adv_norm - ego_next_velocity_to_adv_norm)
-                max_violation = max(max_violation, violation)
-        violation_history.append(max_violation)
+                violation_score = max(violation_score, violation)
+        violation_history.append(violation_score)
                 
                 
-    violation_history += timesteps * [max_violation]
-    return max_violation, violation_history
+    violation_history += timesteps * [violation_score]
+    return violation_score, violation_history
 
         
                 
@@ -198,9 +247,7 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
 # TODO: vehicle yielding rule based on adv vehicle decelerations
 
 
-'''
-
-def stay_on_the_correct_side(realization, start_index=None, end_index=None):
+def road_correct_side(realization, start_index=None, end_index=None):
     violation_history = []
     if start_index is None:
         start_index = 0
@@ -212,25 +259,76 @@ def stay_on_the_correct_side(realization, start_index=None, end_index=None):
         
     network = realization.network
     ego = realization.get_ego()
-    max_violation = 0
+    violation_score = 0
     
     for i in range(start_index, end_index):
+        violation = 0
         state = ego.get_state(i)
-        ego_region = MeshVolumeRegion(mesh=ego.mesh, dimensions=ego.dimensions, position=state.position, rotation=state.orientation)
-        ego_polygon = ego_region.boundingPolygon.polygons
-        ego_road_orientation_field = network.roadAt(state.position).orientation
-        ego_road_yaw = ego_road_orientation_field.value(state.position).yaw
-        ego_yaw = state.orientation.yaw
-        
-        difference = abs(ego_yaw - ego_road_yaw)
+        ego_position = state.position
+        ego_orientation = state.orientation
+        road_orientation_field = network.roadAt(ego_position).orientation
+        road_orientation = road_orientation_field.value(ego_position)
+        road_yaw = road_orientation.yaw
+        ego_yaw = ego_orientation.yaw
+        violation = 1 if math.cos(road_yaw - ego_yaw) < 0 else 0
+        violation_history.append(violation)
+    violation_score = sum(violation_history)
+    return violation_score, violation_history
 
-        if difference > math.pi/2: # wrong direction
-            max_violation = 0
-            
-             
 
-        
-        
-    return max_violation, violation_history
+def vehicle_clearance(realization, step, direction, threshold):
+    if direction == "front":
+        angle = 0
+    elif direction == "left":
+        angle = - math.pi / 2
+    elif direction == "right":
+        angle = math.pi / 2
+    else:
+        raise ValueError("Direction must be 'front', 'left' or 'right'")
+    objects = realization.vehicles[1:]
+    ego_state = realization.get_ego_state(step)
     
-'''
+    ego_yaw = ego_state.orientation.yaw + angle
+    ego_direction = Vector(math.cos(ego_yaw), math.sin(ego_yaw))
+    ego_region = MeshVolumeRegion(mesh=realization.get_ego().mesh, dimensions=realization.get_ego().dimensions, position=ego_state.position, rotation=ego_state.orientation)
+    ego_polygon = ego_region.boundingPolygon.polygons
+    ego_lane = realization.network.laneAt(ego_state.position)
+    if ego_lane is None:
+        return 0
+    violation = 0
+    for obj in objects:
+        obj_state = obj.get_state(step)
+        obj_region = MeshVolumeRegion(mesh=obj.mesh, dimensions=obj.dimensions, position=obj_state.position, rotation=obj_state.orientation)
+        obj_lane = realization.network.laneAt(obj_state.position)
+        if obj_lane is None or obj_lane != ego_lane:
+            continue                     
+        obj_to_ego = (obj_state.position - ego_state.position)
+        cosine = ego_direction.dot(obj_to_ego) / (ego_direction.norm() * obj_to_ego.norm())
+        if cosine > 0:
+            continue 
+        obj_polygon = obj_region.boundingPolygon.polygons
+        distance = ego_polygon.distance(obj_polygon)
+        violation = max(violation, distance - threshold)
+    return violation
+
+            
+def rule_11(realization, step, threshold=3): # front vehicle clearance
+    return vehicle_clearance(realization, step, "front", threshold)
+    
+
+def rule_12(realization, step, threshold=2): # left vehicle clearance
+    return vehicle_clearance(realization, step, "left", threshold)
+        
+        
+def rule_13(realization, step, threshold=2): # right vehicle clearance
+    return vehicle_clearance(realization, step, "right", threshold)
+
+def rule_15(realization, step, threshold=10): # speed limit
+    ego_velocity = realization.get_ego_state(step).velocity.norm()
+    return max(0, ego_velocity - threshold)**2
+
+def rule_18(realization, step): # lane centering
+    pass
+
+
+

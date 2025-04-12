@@ -1,3 +1,6 @@
+# TODO: change naming of class methods
+from cached_property import cached_property
+
 class Realization():
     def __init__(self, max_steps, ego_index=0):
         self.network = None
@@ -23,7 +26,7 @@ class Realization():
         except IndexError:
             raise Exception(f"Error: Object index {object_index} not found in non-ego objects list")
 
-    def get_object_state(self, object_index, step):
+    def get_object_state(self, object_index, step): 
         if 0 <= object_index < len(self.objects):
             return self.objects[object_index].get_state(step)
         else:
@@ -64,6 +67,22 @@ class Realization():
     @property
     def objects_non_ego(self):
         return self.objects[:self.ego_index] + self.objects[self.ego_index + 1:]
+    
+    @cached_property
+    def vehicles(self):
+        vehicles = []
+        for obj in self.objects:
+            if obj.object_type == "Car" or obj.object_type == "Truck":
+                vehicles.append(obj)
+        return vehicles
+    
+    @cached_property
+    def VRUs(self):
+        VRUs = []
+        for obj in self.objects:
+            if obj.object_type == "Pedestrian" or obj.object_type == "Cyclist":
+                VRUs.append(obj)
+        return VRUs
 
 
 class RealizationObject():

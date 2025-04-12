@@ -1,6 +1,5 @@
 param map = localPath('../maps/Town01.xodr')
-param carla_map = 'Town01'
-model scenic.simulators.carla.model
+model scenic.domains.driving.model
 
 
 behavior simple():
@@ -14,9 +13,9 @@ behavior do_nothing():
         wait
 
  
-ego = new Car with behavior simple()
+ego = new Car with behavior FollowLaneBehavior()
 adv = new Car with behavior FollowLaneBehavior(), left of ego by 2
-adv2 = new Car with behavior AutopilotBehavior(), ahead of ego by 10
+
 
 
 from rulebook_benchmark import bench
