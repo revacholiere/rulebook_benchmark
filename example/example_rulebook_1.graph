@@ -1,0 +1,24 @@
+#header
+1
+#nodes
+0 "No collisions with VRUs" rule_vru_collision
+1 "No collisions with vehicles" rule_vehicle_collision
+2 "Staying within the drivable area" rule_stay_in_drivable_area
+3 "VRU off-road clearance" vru_clearance_off_road
+4 "VRU on-road clearance" vru_clearance_on_road
+5 "Dummy" vru_clearance_on_road
+#edges
+0 1
+1 0
+0 2
+2 0
+1 2
+2 1
+0 3
+0 4
+1 3
+1 4
+2 3
+2 4
+3 5
+4 5
