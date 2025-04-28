@@ -5,7 +5,7 @@ from rulebook_benchmark.realization import Realization
 import math
 from scenic.core.vectors import Vector
 
-# TODO: maybe add a generalized rule loop function that takes a rule and start-end time
+
 # TODO: shapely vs scenic distances , same for velocity/acceleration scale
 
 
@@ -266,7 +266,11 @@ def road_correct_side(realization, start_index=None, end_index=None):
         state = ego.get_state(i)
         ego_position = state.position
         ego_orientation = state.orientation
-        road_orientation_field = network.roadAt(ego_position).orientation
+        try:
+            road_orientation_field = network.roadAt(ego_position).orientation
+        except:# road not found
+            violation_history.append(0)
+            continue
         road_orientation = road_orientation_field.value(ego_position)
         road_yaw = road_orientation.yaw
         ego_yaw = ego_orientation.yaw
@@ -276,59 +280,157 @@ def road_correct_side(realization, start_index=None, end_index=None):
     return violation_score, violation_history
 
 
-def vehicle_clearance(realization, step, direction, threshold):
-    if direction == "front":
-        angle = 0
-    elif direction == "left":
-        angle = - math.pi / 2
-    elif direction == "right":
-        angle = math.pi / 2
-    else:
-        raise ValueError("Direction must be 'front', 'left' or 'right'")
+            
+def rule_11(realization, step, threshold=5): # front vehicle clearance
+    ego = realization.get_ego()
+    ego_state = realization.get_ego_state(step)
+    ego_lane = realization.network.laneAt(ego_state.position)
+    ego_polygon = ego.get_polygon(ego_state)
+    
+    if len(realization.vehicles) == 1 or ego_lane is None: #base case for no vehicles or ego not in drivable area
+        return 0
+    
+    proximity_threshold = threshold*3
     objects = realization.vehicles[1:]
+    candidate_objects = []
+    candidate_distances = []
+    
+    for obj in objects: # filter out far objects
+        obj_state = obj.get_state(step)
+        obj_polygon = obj.get_polygon(obj_state)
+        dist = shapely.distance(ego_polygon, obj_polygon)
+        if dist < proximity_threshold:
+            candidate_objects.append(obj)
+            candidate_distances.append(dist)
+            
+    if len(candidate_objects) == 0: # no objects in proximity
+        return 0
+    
+    network = realization.network
+    intersection = network.intersectionAt(ego_state.position)
+    
+    max_violation = 0
+    possible_lanes = []
+    next_lanes = []
+    if intersection is None:
+        if ego_lane.maneuvers[0].intersection is not None: # ego has maneuvers in an intersection
+            for maneuver in ego_lane.maneuvers:
+                next_lanes.append(maneuver.connectingLane)
+        else:
+            assert len(ego_lane.maneuvers) == 1
+            next_lanes.append(ego_lane.successor)
+            possible_lanes.append(ego_lane)
+
+    else: # ego in intersection
+        assert ego_lane.predecessor is not None
+        predecessor = ego_lane.predecessor
+        for maneuver in predecessor.maneuvers:
+            possible_lanes.append(maneuver.connectingLane)
+            next_lanes.append(maneuver.endLane)
+        
+    ego_point = shapely.Point(ego_state.position.x, ego_state.position.y)
+        
+    for obj, dist in zip(candidate_objects, candidate_distances):
+        obj_state = obj.get_state(step)
+        obj_polygon = obj.get_polygon(obj_state)
+        for possible_lane, next_lane in zip(possible_lanes, next_lanes):
+            lane_polygon = possible_lane.polygons
+            if shapely.intersects(lane_polygon, obj_polygon) and shapely.intersects(lane_polygon, ego_point):
+                centerline = ego_lane.centerline.lineString.segmentize(1).coords[:]
+                min_ego_dist = float("inf")
+                min_obj_dist = float("inf")
+                ego_ind = 0
+                obj_ind = 0
+                for p in range(len(centerline)):
+                    point = centerline[p]
+                    point = Vector(point[0], point[1], 0)
+                    ego_dist = (point - ego_state.position).norm()
+                    obj_dist = (point - obj_state.position).norm()
+
+                    if ego_dist < min_ego_dist:
+                        ego_ind = p
+                    if obj_dist < min_obj_dist:
+                        min_obj_dist = obj_dist
+                        obj_ind = p
+
+                if ego_ind < obj_ind:
+                    max_violation = max(max_violation, threshold - dist)
+                break
+            next_lane_polygon = next_lane.polygons
+            if shapely.intersects(next_lane_polygon, obj_polygon) and shapely.intersects(lane_polygon, ego_point):
+                max_violation = max(max_violation, threshold - dist)
+                break 
+                    
+                    
+                    
+                
+                    
+                
+    return max_violation
+            
+            
+def rule_12(realization, step, threshold=2): # left vehicle clearance
+    ego = realization.get_ego()
+    net = realization.network
     ego_state = realization.get_ego_state(step)
     
-    ego_yaw = ego_state.orientation.yaw + angle
-    ego_direction = Vector(math.cos(ego_yaw), math.sin(ego_yaw))
-    ego_region = MeshVolumeRegion(mesh=realization.get_ego().mesh, dimensions=realization.get_ego().dimensions, position=ego_state.position, rotation=ego_state.orientation)
-    ego_polygon = ego_region.boundingPolygon.polygons
-    ego_lane = realization.network.laneAt(ego_state.position)
-    if ego_lane is None:
-        return 0
-    violation = 0
-    for obj in objects:
-        obj_state = obj.get_state(step)
-        obj_region = MeshVolumeRegion(mesh=obj.mesh, dimensions=obj.dimensions, position=obj_state.position, rotation=obj_state.orientation)
-        obj_lane = realization.network.laneAt(obj_state.position)
-        if obj_lane is None or obj_lane != ego_lane:
-            continue                     
-        obj_to_ego = (obj_state.position - ego_state.position)
-        cosine = ego_direction.dot(obj_to_ego) / (ego_direction.norm() * obj_to_ego.norm())
-        if cosine > 0:
-            continue 
-        obj_polygon = obj_region.boundingPolygon.polygons
-        distance = ego_polygon.distance(obj_polygon)
-        violation = max(violation, distance - threshold)
-    return violation
 
-            
-def rule_11(realization, step, threshold=3): # front vehicle clearance
-    return vehicle_clearance(realization, step, "front", threshold)
+    ego_lane_group = net.laneGroupAt(ego_state.position)
+    ego_lane = net.laneAt(ego_state.position)
     
-
-def rule_12(realization, step, threshold=2): # left vehicle clearance
-    return vehicle_clearance(realization, step, "left", threshold)
+    if ego_lane_group is None or ego_lane is None: # ego not in drivable area
+        return 0
+    
+    adjacent_lanes = ego_lane_group.adjacentLanes
+    if len(adjacent_lanes) == 1 and adjacent_lanes[0] not in ego_lane_group.lanes or len(adjacent_lanes) == 2:
+        adv_lane = adjacent_lanes[0]
+    # add one more clause checking lane group
+    else:
+        return 0
+    
+    objects = realization.vehicles[1:]
+    distances = []
+    for obj in objects: # find closest object in adjacent left lane
+        obj_state = obj.get_state(step)
+        obj_lane = net.laneAt(obj_state.position)
+        if obj_lane is None or obj_lane != adv_lane:
+            continue
+        distance = (objects[obj].position - ego_state.position).norm()
+        distances.append(distance)
+    if len(distances) == 0:
+        return 0
+    ind = distances.index(min(distances))
+    obj = objects[ind]
+    obj_state = obj.get_state(step)
+    obj_region = MeshVolumeRegion(mesh=obj.mesh, dimensions=obj.dimensions, position=obj_state.position, rotation=obj_state.orientation)
+    obj_polygon = obj_region.boundingPolygon.polygons
+    ego_region = MeshVolumeRegion(mesh=ego.mesh, dimensions=ego.dimensions, position=ego_state.position, rotation=ego_state.orientation)
+    ego_polygon = ego_region.boundingPolygon.polygons
+    distance = ego_polygon.distance(obj_polygon)
+    return max(0, distance - threshold)
+        
         
         
 def rule_13(realization, step, threshold=2): # right vehicle clearance
-    return vehicle_clearance(realization, step, "right", threshold)
+    pass
 
 def rule_15(realization, step, threshold=10): # speed limit
     ego_velocity = realization.get_ego_state(step).velocity.norm()
     return max(0, ego_velocity - threshold)**2
 
 def rule_18(realization, step): # lane centering
-    pass
+    ego_state = realization.get_ego_state(step)
+    ego_pos = ego_state.position
+    
+    centerline = realization.network.laneAt(ego_pos).centerline.lineString
+    # double check shapely distance function for sparse centerline
+    ego_pos_point = shapely.Point(ego_pos.x, ego_pos.y)
+    distance = centerline.distance(ego_pos_point)
+    return distance
 
 
 
+
+
+# TODO: vehicle yielding rule10, VRU TTC rule 4, vehicle TTC rule6, parked vehicle rule 14, turn signal rule 16
+# TODO: lane keeping rule 17, following distance rule 19

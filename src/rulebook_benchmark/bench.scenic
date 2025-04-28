@@ -6,7 +6,7 @@ monitor bench():
     realization = globalParameters['realization']
     realization.network = Network.fromFile(globalParameters['map'])
 
-    objects = simulation().objects[:-1]
+    objects = simulation().objects
     max_steps = realization.max_steps
     objs = []
     for obj in objects:
@@ -15,7 +15,7 @@ monitor bench():
 
     step = 0
     while True:
-        objects = simulation().objects[:-1]
+        objects = simulation().objects
 
         for i in range(len(objects)):
             obj = realization.objects[i]
