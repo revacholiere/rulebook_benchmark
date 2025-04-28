@@ -1,5 +1,6 @@
 # TODO: change naming of class methods
 from cached_property import cached_property
+from scenic.core.regions import MeshVolumeRegion
 
 class Realization():
     def __init__(self, max_steps, ego_index=0):
@@ -97,6 +98,10 @@ class RealizationObject():
             return self.trajectory[step]
         except IndexError:
             raise Exception(f"Error: Step {step} not found in object trajectory")
+        
+    def get_polygon(self, state):
+        return MeshVolumeRegion(mesh=self.mesh, position=state.position, rotation=state.orientation_trimesh, dimensions=self.dimensions).boundingPolygon.polygons
+        
 
 
 class State():
