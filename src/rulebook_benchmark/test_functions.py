@@ -1,4 +1,4 @@
-def test_func_0(traj):
+def test_func_0(traj, start_index, end_index):
     if traj == 'a':
         return 2
     elif traj == 'b':
@@ -6,7 +6,7 @@ def test_func_0(traj):
     else:
         raise ValueError('Invalid trajectory')
     
-def test_func_1(traj):
+def test_func_1(traj, start_index, end_index):
     if traj == 'a':
         return 1
     elif traj == 'b':
@@ -14,7 +14,7 @@ def test_func_1(traj):
     else:
         raise ValueError('Invalid trajectory')
     
-def test_func_2(traj):
+def test_func_2(traj, start_index, end_index):
     if traj == 'a':
         return 1
     elif traj == 'b':
@@ -22,7 +22,7 @@ def test_func_2(traj):
     else:
         raise ValueError('Invalid trajectory')
     
-def test_func_3(traj):
+def test_func_3(traj, start_index, end_index):
     if traj == 'a':
         return 2
     elif traj == 'b':
@@ -30,7 +30,7 @@ def test_func_3(traj):
     else:
         raise ValueError('Invalid trajectory')
     
-def test_func_4(traj):
+def test_func_4(traj, start_index, end_index):
     if traj == 'a':
         return 1
     elif traj == 'b':
@@ -38,7 +38,7 @@ def test_func_4(traj):
     else:
         raise ValueError('Invalid trajectory')
 
-def test_func_5(traj):
+def test_func_5(traj, start_index, end_index):
     if traj == 'a':
         return 2
     elif traj == 'b':
@@ -46,7 +46,7 @@ def test_func_5(traj):
     else:    
         raise ValueError('Invalid trajectory')
     
-def test_func_6(traj):
+def test_func_6(traj, start_index, end_index):
     if traj == 'a':
         return 2
     elif traj == 'b':
