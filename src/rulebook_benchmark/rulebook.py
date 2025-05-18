@@ -25,6 +25,8 @@ class Rulebook:
         """
         self.verbosity = 1
         self.priority_graph = nx.DiGraph()
+        self.rule_ids = set()
+        self.rule_to_node_id = {}
         if rule_file:
             self._parse_rules(rule_file)
         if rulebook_file:
@@ -32,7 +34,7 @@ class Rulebook:
         
     def _parse_rules(self, rule_file):
         """
-        Parses rules from a rule file.
+        Parses rule functions from a rule file.
         """
         with open(rule_file, 'r') as file:
             file_contents = file.read()
@@ -59,19 +61,24 @@ class Rulebook:
         with open(rulebook_file, 'r') as f:
             lines = f.readlines()
             header_section = False
-            node_section = False
+            rule_section = False
+            same_level_section = False
             edge_section = False
             for line in lines:
                 line = line.strip()
                 if line == '#header':
                     header_section = True
                     continue
-                elif line == '#nodes':
+                elif line == '#rules':
                     header_section = False
-                    node_section = True
+                    rule_section = True
                     continue
-                elif line == '#edges':
-                    node_section = False
+                elif line == '#same-level':
+                    rule_section = False
+                    same_level_section = True
+                    continue
+                elif line == '#priorities':
+                    same_level_section = False
                     edge_section = True
                     continue
                 
@@ -81,26 +88,50 @@ class Rulebook:
                     continue
                 
                 # Node
-                if node_section:
-                    node_info = line.split('"')
-                    node_id = int(node_info[0].strip())
-                    rule_name = node_info[1]
-                    rule_func_name = node_info[2].strip()
+                if rule_section:
+                    rule_info = line.split('"')
+                    rule_id = int(rule_info[0].strip())
+                    self.rule_ids.add(rule_id)
+                    self.rule_to_node_id[rule_id] = rule_id
+                    rule_name = rule_info[1]
+                    rule_func_name = rule_info[2].strip()
                     rule_func = self.functions[rule_func_name]
-                    self.priority_graph.add_node(node_id, rule=Rule(rule_func, rule_name, description="", args={"start_index": 0, "end_index": None}))
+                    rule = Rule(id=rule_id, func=rule_func, name=rule_name, description="")
+                    self.priority_graph.add_node(rule_id, rules={rule_id: rule})
                     if self.verbosity >= 2:
-                        print(f'Add node {node_id} with rule: {rule_name}, rule function name: {rule_func_name}, rule function: {rule_func}')
+                        print(f'Add rule {rule_id} with name: {rule_name}, rule function: {rule_func}')
+                
+                # Same level rules
+                if same_level_section:
+                    same_level_info = line.split(' ')
+                    rep = int(same_level_info[0])
+                    for i in range(1, len(same_level_info)):
+                        self.rule_to_node_id[int(same_level_info[i])] = rep
+                        self.priority_graph.nodes[rep]['rules'][int(same_level_info[i])] = self.priority_graph.nodes[int(same_level_info[i])]['rules'][int(same_level_info[i])]
+                        self.priority_graph.remove_node(int(same_level_info[i]))
+                        if self.verbosity >= 2:
+                            print(f'Assign rule {int(same_level_info[i])} to the same level as the representative rule {rep}')
                 
                 # Edge
                 if edge_section:
                     edge_info = line.split(' ')
-                    src = int(edge_info[0])
-                    dst = int(edge_info[1])
+                    src = self.rule_to_node_id[int(edge_info[0])]
+                    dst = self.rule_to_node_id[int(edge_info[1])]
+                    if src == dst:
+                        continue
+                    if self.priority_graph.has_edge(src, dst):
+                        continue
                     self.priority_graph.add_edge(src, dst)
                     if self.verbosity >= 2:
-                        print(f'Add edge from {src} to {dst}')
+                        print(f'Add edge from rule {src} to rule {dst}')
+                        
+            self.check_rulebook()
                         
             if self.verbosity >= 2:
+                for id in self.priority_graph.nodes():
+                    for rule_id in self.priority_graph.nodes[id]['rules']:
+                        rule = self.priority_graph.nodes[id]['rules'][rule_id]
+                        rule.print()
                 print(f'Nodes: {self.priority_graph.nodes(data=True)}')
                 print(f'Edges: {self.priority_graph.edges()}')
     
@@ -108,86 +139,130 @@ class Rulebook:
         """
         Adds an isolated rule to the rulebook.
         """
-        if id in self.priority_graph.nodes():
-            raise ValueError(f"Node ID {id} already exists in the priority graph.")
-        self.priority_graph.add_node(id, rule=Rule(rule_function, name, description="", args={"start_index": 0, "end_index": None}))
+        if id in self.rule_ids:
+            raise ValueError(f"Node ID {id} already exists in the rulebook.")
+        self.rule_ids.add(id)
+        self.rule_to_node_id[id] = id
+        rule = Rule(id=id, func=rule_function, name=name, description="")
+        self.priority_graph.add_node(id, rules={id: rule})
         
-    def add_rule_relation(self, node_id_1, node_id_2, relation=Relation.LARGER):
+    def add_rule_relation(self, rule_id_1, rule_id_2, relation=Relation.LARGER):
         """
         Adds a rule relation to the rulebook.
         """
-        if node_id_1 not in self.priority_graph.nodes() or node_id_2 not in self.priority_graph.nodes():
-            raise ValueError("Both nodes must exist in the priority graph.")
+        if rule_id_1 not in self.rule_ids or rule_id_2 not in self.rule_ids:
+            raise ValueError(f"Rule IDs {rule_id_1} and {rule_id_2} must exist in the rulebook.")
+        resp_1 = self.rule_to_node_id[rule_id_1]
+        resp_2 = self.rule_to_node_id[rule_id_2]
+        if resp_1 == resp_2:
+            raise ValueError(f"Node IDs {rule_id_1} and {rule_id_2} are already assigned to the same level.")
         if relation == Relation.LARGER:
-            self.priority_graph.add_edge(node_id_1, node_id_2)
+            self.priority_graph.add_edge(resp_1, resp_2)
         elif relation == Relation.SMALLER:
-            self.priority_graph.add_edge(node_id_2, node_id_1)
+            self.priority_graph.add_edge(resp_2, resp_1)
         elif relation == Relation.EQUAL:
-            self.priority_graph.add_edge(node_id_1, node_id_2)
-            self.priority_graph.add_edge(node_id_2, node_id_1)
+            for id, rule in self.priority_graph.nodes[resp_2]['rules'].items():
+                self.priority_graph.nodes[resp_1]['rules'][id] = rule
+                self.rule_to_node_id[id] = resp_1
+            preds = list(self.priority_graph.predecessors(resp_2))
+            succs = list(self.priority_graph.successors(resp_2))
+            self.priority_graph.remove_node(resp_2)
+            for pred in preds:
+                self.priority_graph.add_edge(pred, resp_1)
+            for succ in succs:
+                self.priority_graph.add_edge(resp_1, succ)
         elif relation == Relation.NONCOMPARABLE:
             pass
+        self.check_rulebook()
         
-    def remove_rule(self, node_id):
+    def remove_rule(self, rule_id):
         """
-        Removes a rule from the rulebook.
+        Removes a rule from the rulebook. The predcessors and successors will be connected.
         """
-        if node_id not in self.priority_graph.nodes():
-            raise ValueError(f"Node ID {node_id} not found in the priority graph.")
-        self.priority_graph.remove_node(node_id)
+        if rule_id not in self.rule_ids:
+            raise ValueError(f"Rule ID {rule_id} not found in the priority graph.")
+        resp = self.rule_to_node_id[rule_id]
+        if len(self.priority_graph.nodes[resp]['rules']) == 1:
+            preds = list(self.priority_graph.predecessors(resp))
+            succs = list(self.priority_graph.successors(resp))
+            for pred in preds:
+                for succ in succs:
+                    if not self.priority_graph.has_edge(pred, succ):
+                        self.priority_graph.add_edge(pred, succ)
+            self.priority_graph.remove_node(resp)
+            self.check_rulebook()
+        else:   
+            self.priority_graph.nodes[resp]['rules'].pop(rule_id)
+            if resp == rule_id:
+                new_resp = list(self.priority_graph.nodes[resp]['rules'].keys())[0]
+                self.priority_graph.add_node(new_resp, **self.priority_graph.nodes[resp])
+                for pred in self.priority_graph.predecessors(resp):
+                    self.priority_graph.add_edge(pred, new_resp)
+                for succ in self.priority_graph.successors(resp):
+                    self.priority_graph.add_edge(new_resp, succ)
+                self.priority_graph.remove_node(resp)
+                for id in self.priority_graph.nodes[new_resp]['rules']:
+                    self.rule_to_node_id[id] = new_resp
+        self.rule_ids.remove(rule_id)
+        self.rule_to_node_id.pop(rule_id)
         
-    def remove_rule_relation(self, node_id_1, node_id_2):
+    def remove_rule_relation(self, rule_id_1, rule_id_2):
         """
-        Removes a rule relation from the rulebook.
+        Removes a rule edge from the rulebook.
         """
-        if node_id_1 not in self.priority_graph.nodes() or node_id_2 not in self.priority_graph.nodes():
-            raise ValueError("Both nodes must exist in the priority graph.")
-        self.priority_graph.remove_edge(node_id_1, node_id_2)
+        if rule_id_1 not in self.rule_ids or rule_id_2 not in self.rule_ids:
+            raise ValueError(f"Rule IDs {rule_id_1} and {rule_id_2} must exist in the rulebook.")
+        resp_1 = self.rule_to_node_id[rule_id_1]
+        resp_2 = self.rule_to_node_id[rule_id_2]
+        if self.priority_graph.has_edge(resp_1, resp_2):
+            self.priority_graph.remove_edge(resp_1, resp_2)
+        else:
+            raise ValueError(f"No edge exists between {rule_id_1} and {rule_id_2}.")
         
     def get_rule_names(self):
         """
         Returns the names of all rules in the rulebook.
         """
-        return [self.priority_graph.nodes[node]['rule'].name for node in self.priority_graph.nodes()]
+        names = []
+        for node in self.priority_graph.nodes():
+            for rule_id in self.priority_graph.nodes[node]['rules']:
+                names.append(self.priority_graph.nodes[node]['rules'][rule_id].name)
+        return names
     
-    def get_rule_relation(self, node_id_1, node_id_2, to_print=False):
+    def get_rule_relation(self, rule_id_1, rule_id_2, to_print=False):
         """
         Returns the priority relation bewteen rule 1 and rule 2.
-        Args:
-            node_id_1 (int): The node ID of rule 1.
-            node_id_2 (int): The node ID of rule 2.
         """
-        if node_id_1 not in self.priority_graph.nodes() or node_id_2 not in self.priority_graph.nodes():
+        if rule_id_1 not in self.rule_ids or rule_id_2 not in self.rule_ids:
             if to_print:
-                print("Node IDs not found in the priority graph.")
+                print("Rule IDs not found in the rulebook.")
             return
+        node_id_1 = self.rule_to_node_id[rule_id_1]
+        node_id_2 = self.rule_to_node_id[rule_id_2]
         if node_id_1 == node_id_2:
             if to_print:
-                print(f'Rule {node_id_1} and Rule {node_id_2} are equal.')
-            return Relation.EQUAL
-        if node_id_1 in nx.descendants(self.priority_graph, node_id_2) and node_id_2 in nx.descendants(self.priority_graph, node_id_1):
-            if to_print:
-                print(f'Rule {node_id_1} and Rule {node_id_2} are equal.')
+                print(f'Rule {rule_id_1} and Rule {rule_id_2} are equal.')
             return Relation.EQUAL
         if node_id_1 in nx.descendants(self.priority_graph, node_id_2):
             if to_print:
-                print(f'Rule {node_id_1} is smaller than Rule {node_id_2}.')
+                print(f'Rule {rule_id_1} is smaller than Rule {rule_id_2}.')
             return Relation.SMALLER
         if node_id_2 in nx.descendants(self.priority_graph, node_id_1):
             if to_print:
-                print(f'Rule {node_id_1} is larger than Rule {node_id_2}.')
+                print(f'Rule {rule_id_1} is larger than Rule {rule_id_2}.')
             return Relation.LARGER
         if to_print:
-            print(f'Rule {node_id_1} and Rule {node_id_2} are non-comparable.')
+            print(f'Rule {rule_id_1} and Rule {rule_id_2} are non-comparable.')
         return Relation.NONCOMPARABLE
     
-    def evaluate_trajectory_rule(self, node_id, traj):
+    def evaluate_trajectory_rule(self, rule_id, traj):
         """
         Evaluates a trajectory on a specific rule given its node ID.
         """
-        if node_id not in self.priority_graph.nodes():
-            raise ValueError(f"Node ID {node_id} not found in the priority graph.")
-        rule = self.priority_graph.nodes[node_id]['rule']
+        if rule_id not in self.rule_ids:
+            raise ValueError(f"Rule ID {rule_id} not found in the rulebook.")
+        node_id = self.rule_to_node_id[rule_id]
+        rule = self.priority_graph.nodes[node_id]['rules'][rule_id]
         return rule(traj)
     
     def evaluate_trajectory_all(self, traj):
@@ -196,8 +271,9 @@ class Rulebook:
         """
         violations = []
         violation_histories = []
-        for node_id in self.priority_graph.nodes():
-            rule = self.priority_graph.nodes[node_id]['rule']
+        for rule_id in self.rule_ids:
+            node_id = self.rule_to_node_id[rule_id]
+            rule = self.priority_graph.nodes[node_id]['rules'][rule_id]
             violation, violation_history = rule(traj)
             violations.append(violation)
             violation_histories.append(violation_history)
@@ -207,138 +283,63 @@ class Rulebook:
         """
         Compares two trajectories with respect to the rulebook.
         """
-        # Step 1: Group rules into equivalence classes (same-level)
-        equivalence_classes = []
-        rule_to_class = {}
-
-        for rule in list(self.priority_graph.nodes()):
-            added = False
-            for group in equivalence_classes:
-                if self.get_rule_relation(rule, group[0]) == Relation.EQUAL:
-                    group.append(rule)
-                    rule_to_class[rule] = group[0]
-                    added = True
-                    break
-            if not added:
-                equivalence_classes.append([rule])
-                rule_to_class[rule] = rule
-
-        # Step 2: Build merged graph
-        merged_graph = nx.DiGraph()
-        for group in equivalence_classes:
-            rep = group[0]
-            label = ", ".join(map(str, group))
-            func = [self.priority_graph.nodes[rule]['rule'].rule for rule in group]
-            merged_graph.add_node(rep, label=label, func=func)
-
-        # Step 3: Add edges based on strict relations
-        for i in list(self.priority_graph.nodes()):
-            for j in list(self.priority_graph.nodes()):
-                if i == j:
-                    continue
-                rel = self.get_rule_relation(i, j)
-                rep_i = rule_to_class[i]
-                rep_j = rule_to_class[j]
-                if rel == Relation.LARGER and rep_i != rep_j:
-                    merged_graph.add_edge(rep_i, rep_j)
-                elif rel == Relation.SMALLER and rep_i != rep_j:
-                    merged_graph.add_edge(rep_j, rep_i)
-                    
-        print("Merged graph nodes:", merged_graph.nodes(data=True))
-        print("Merged graph edges:", merged_graph.edges())
-        
-        # Step 4: Evaluate all rules
         f1_vals = {}
         f2_vals = {}
-        for id in merged_graph.nodes():
-            node = merged_graph.nodes[id]
-            if len(node['func']) > 1:
-                f1_vals[id] = sum([func(traj1) for func in node['func']]) / len(node['func'])
-                f2_vals[id] = sum([func(traj2) for func in node['func']]) / len(node['func'])
+        for node_id in self.priority_graph.nodes():
+            node = self.priority_graph.nodes[node_id]
+            if len(node['rules']) > 1:
+                f1_vals[node_id] = sum([rule(traj1) for rule in node['rules'].values()]) / len(node['rules'])
+                f2_vals[node_id] = sum([rule(traj2) for rule in node['rules'].values()]) / len(node['rules'])
             else:
-                f1_vals[id] = node['func'][0](traj1)
-                f2_vals[id] = node['func'][0](traj2)
-        print("f1_vals:", f1_vals)
-        print("f2_vals:", f2_vals)
+                f1_vals[node_id] = node['rules'][list(node['rules'].keys())[0]](traj1)
+                f2_vals[node_id] = node['rules'][list(node['rules'].keys())[0]](traj2)
+        if self.verbosity >= 2:
+            print("f1_vals:", f1_vals)
+            print("f2_vals:", f2_vals)
         
-        # Step 5: Classify all comparisons
-        traj1_worse_nodes = [f for f in merged_graph.nodes() if f1_vals[f] > f2_vals[f]]
-        traj2_worse_nodes = [f for f in merged_graph.nodes() if f1_vals[f] < f2_vals[f]]
-        equal_nodes = [f for f in merged_graph.nodes() if f1_vals[f] == f2_vals[f]]
-        print("traj1_worse_nodes:", traj1_worse_nodes)
-        print("traj2_worse_nodes:", traj2_worse_nodes)
-        print("equal_nodes:", equal_nodes)
+        traj1_worse_nodes = [f for f in self.priority_graph.nodes() if f1_vals[f] > f2_vals[f]]
+        traj2_worse_nodes = [f for f in self.priority_graph.nodes() if f1_vals[f] < f2_vals[f]]
+        equal_nodes = [f for f in self.priority_graph.nodes() if f1_vals[f] == f2_vals[f]]
+        if self.verbosity >= 2:
+            print("traj1_worse_nodes:", traj1_worse_nodes)
+            print("traj2_worse_nodes:", traj2_worse_nodes)
+            print("equal_nodes:", equal_nodes)
         
-        # Step 6: Compare between traj 1 andtraj 2
         def is_defended(worse_nodes, defender_condition):
             for node in worse_nodes:
-                ancestors = nx.ancestors(merged_graph, node)
+                ancestors = nx.ancestors(self.priority_graph, node)
                 if not any(defender_condition(a) for a in ancestors):
                     return False  # this worse node is not defended
             return True
 
         traj1_defended = is_defended(traj1_worse_nodes, lambda f: f1_vals[f] < f2_vals[f])
         traj2_defended = is_defended(traj2_worse_nodes, lambda f: f1_vals[f] > f2_vals[f])
-        print("traj1_defended:", traj1_defended)
-        print("traj2_defended:", traj2_defended)
+        if self.verbosity >= 2:
+            print("traj1_defended:", traj1_defended)
+            print("traj2_defended:", traj2_defended)
 
         if not traj1_worse_nodes and not traj2_worse_nodes:
             print("Trajectories are equal.")
+            return Relation.EQUAL
         elif (traj1_worse_nodes and traj1_defended) or not traj1_worse_nodes:
             print("Trajectory 1 is better.")
+            return Relation.LARGER
         elif (traj2_worse_nodes and traj2_defended) or not traj2_worse_nodes:
             print("Trajectory 2 is better.")
+            return Relation.SMALLER
         else:
             print("Trajectories are non-comparable.")
+            return Relation.NONCOMPARABLE
     
     def visualize_rulebook(self, output_file_name="merged_rule_graph.png"):
-        # TODO: need to verify the code
-        # Step 1: Group rules into equivalence classes (same-level)
-        equivalence_classes = []
-        rule_to_class = {}
-
-        for rule in list(self.priority_graph.nodes()):
-            added = False
-            for group in equivalence_classes:
-                if self.get_rule_relation(rule, group[0]) == Relation.EQUAL:
-                    group.append(rule)
-                    rule_to_class[rule] = group[0]
-                    added = True
-                    break
-            if not added:
-                equivalence_classes.append([rule])
-                rule_to_class[rule] = rule
-
-        # Step 2: Build merged graph
-        merged_graph = nx.DiGraph()
-        for group in equivalence_classes:
-            rep = group[0]
-            label = ", ".join(map(str, group))
-            merged_graph.add_node(rep, label=label)
-
-        # Step 3: Add edges based on strict relations
-        for i in list(self.priority_graph.nodes()):
-            for j in list(self.priority_graph.nodes()):
-                if i == j:
-                    continue
-                rel = self.get_rule_relation(i, j)
-                rep_i = rule_to_class[i]
-                rep_j = rule_to_class[j]
-                if rel == Relation.LARGER and rep_i != rep_j:
-                    merged_graph.add_edge(rep_i, rep_j)
-                elif rel == Relation.SMALLER and rep_i != rep_j:
-                    merged_graph.add_edge(rep_j, rep_i)
-
-        # Step 4: Assign y-coordinates by level (based on longest path from sinks)
         ranks = {}
-        for node in nx.topological_sort(merged_graph):
-            preds = list(merged_graph.predecessors(node))
+        for node in nx.topological_sort(self.priority_graph):
+            preds = list(self.priority_graph.predecessors(node))
             if not preds:
                 ranks[node] = 0
             else:
                 ranks[node] = max(ranks[p] + 1 for p in preds)
 
-        # Step 5: Create layout
         pos = {}
         levels = defaultdict(list)
         for node, rank in ranks.items():
@@ -348,15 +349,17 @@ class Rulebook:
             for x, node in enumerate(nodes_at_rank):
                 pos[node] = (x, y)
 
-        # Step 6: Draw
-        labels = nx.get_node_attributes(merged_graph, 'label')
+        labels = {}
+        for node in self.priority_graph.nodes():
+            rule = self.priority_graph.nodes[node]['rules']
+            labels[node] = ", ".join([str(id) for id in rule.keys()])
         plt.figure(figsize=(12, 8))
-        nx.draw(merged_graph, pos, labels=labels, with_labels=True,
+        nx.draw(self.priority_graph, pos, labels=labels, with_labels=True,
                 node_color='lightblue', node_size=3000, font_size=10, arrows=True)
-        plt.title("Rule Graph with Same-Level Nodes Merged")
+        plt.title("Rulebook Graph with Same-Level Nodes Merged")
         plt.savefig(output_file_name)
         plt.show()
-    
+
     def get_adjecency_list(self):
         """
         Returns the adjacency list of the priority graph.
@@ -378,16 +381,15 @@ class Rulebook:
             Relation.EQUAL: '=',
             Relation.NONCOMPARABLE: 'x'
         }
-        nodes = list(self.priority_graph.nodes())
-        print("      " + "  ".join(f"{i:>2}" for i in range(len(nodes))))
-        print("    " + "----" * (len(nodes)))
-        for i, row_node in enumerate(nodes):
-            row_display = [f"{i:>2} |"]
-            for j, col_node in enumerate(nodes):
-                if i == j:
+        print("      " + "  ".join(f"{id2:>2}" for id2 in self.rule_ids))
+        print("    " + "----" * (len(self.rule_ids)))
+        for id1 in self.rule_ids:
+            row_display = [f"{id1:>2} |"]
+            for id2 in self.rule_ids:
+                if id1 == id2:
                     row_display.append(" -")
                 else:
-                    relation = self.get_rule_relation(row_node, col_node)
+                    relation = self.get_rule_relation(id1, id2)
                     symbol = relation_symbols[relation]
                     row_display.append(f" {symbol}")
             print("  ".join(row_display))
@@ -396,29 +398,41 @@ class Rulebook:
         """
         Checks the rulebook for consistency.
         """
-        print("Cycles in the rulebook:", list(nx.simple_cycles(self.priority_graph)))
+        if len(list(nx.simple_cycles(self.priority_graph))) > 0:
+            print("Cycles in the rulebook:", list(nx.simple_cycles(self.priority_graph)))
+            raise ValueError("The rulebook contains cycles. Please double check!")
         
     def __call__(self, traj):
         return self.evaluate_trajectory_all(traj)
     
 class Rule:
-    def __init__(self, rule_function, name, description, args={}):
-        self.rule = rule_function
+    def __init__(self, id, func, name="", description="", args={}):
+        self.id = id
+        self.func = func
         self.name = name
         self.description = description
         self.args = args
     
+    def print(self):
+        print(f"id:{self.id}, name: {self.name}, functions: {self.func}")
+        
     def __call__(self, realization, start_index=None, end_index=None):
+<<<<<<< HEAD
         return self.rule(realization=realization, start_index=start_index, end_index=end_index, **self.args)
+=======
+        return self.func(realization, start_index, end_index, **self.args)
+>>>>>>> da8654d8a43feb316c6f2d056f21be6479277659
     
 if __name__ == "__main__":
     rb = Rulebook()
     rb._parse_rules("test_functions.py")
     rb._parse_rulebook_from_file("../../example/example_rulebook_0.graph")
-    
-    rb.get_rule_relation(4, 1, to_print=True)
+    from test_functions import test_func_1
+    rb.add_rule(7, "Test rule 7", test_func_1)
+    rb.add_rule_relation(7, 4, Relation.LARGER)
     rb.print_adjacency_matrix()
-    print(rb.get_rule_names())
+    rb.remove_rule(7)
+    rb.print_adjacency_matrix()
     rb.visualize_rulebook(output_file_name="../../example/example_rulebook_0.png")
     
     rb.compare_trajectories('a', 'b')
