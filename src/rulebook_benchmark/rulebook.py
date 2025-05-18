@@ -409,7 +409,7 @@ class Rule:
         self.args = args
     
     def __call__(self, realization, start_index=None, end_index=None):
-        return self.rule(realization, start_index, end_index, **self.args)
+        return self.rule(realization=realization, start_index=start_index, end_index=end_index, **self.args)
     
 if __name__ == "__main__":
     rb = Rulebook()

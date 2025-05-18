@@ -4,6 +4,7 @@ import shapely
 from rulebook_benchmark.realization import Realization
 import math
 from scenic.core.vectors import Vector
+from rulebook_benchmark.rulebook import Rule
 
 
 # TODO: shapely vs scenic distances , same for velocity/acceleration scale
@@ -434,3 +435,44 @@ def rule_18(realization, step): # lane centering
 
 # TODO: vehicle yielding rule10, VRU TTC rule 4, vehicle TTC rule6, parked vehicle rule 14, turn signal rule 16
 # TODO: lane keeping rule 17, following distance rule 19
+
+
+
+default_rules = [Rule(
+    name="VRU Collision",
+    rule_function=rule_vru_collision,
+    args={},
+    description="Collision between ego and pedestrians")
+, Rule(
+    name="Vehicle Collision",
+    rule_function=rule_vehicle_collision,
+    args={},
+    description="Collision between ego and other vehicles")
+, Rule(
+    name="Stay in Drivable Area",
+    rule_function=rule_stay_in_drivable_area,
+    args={},
+    description="Ego vehicle stays in the drivable area")
+, Rule(
+    name="VRU Clearance On Road",
+    rule_function=vru_clearance_on_road,
+    args={},
+    description="Ego vehicle maintains clearance from VRUs on road")
+, Rule(
+    name="VRU Clearance Off Road",
+    rule_function=vru_clearance_off_road,
+    args={},
+    description="Ego vehicle maintains clearance from VRUs off road")
+, Rule(
+    name="VRU Acknowledgement",
+    rule_function=vru_acknowledgement,
+    args={},
+    description="Ego vehicle acknowledges VRUs in its path")
+, Rule(
+    name="Road Correct Side",
+    rule_function=road_correct_side,
+    args={},
+    description="Ego vehicle stays on the correct side of the road")
+]
+            
+                          
