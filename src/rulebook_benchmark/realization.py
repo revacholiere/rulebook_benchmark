@@ -110,7 +110,8 @@ class State():
         self.velocity = velocity
         self.orientation = orientation
         self.step = step
-
+        self.lane = None # to be set in process_trajectory
+        
     @property
     def orientation_trimesh(self):
         return self.orientation._trimeshEulerAngles()

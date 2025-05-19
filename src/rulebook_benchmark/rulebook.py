@@ -417,11 +417,7 @@ class Rule:
         print(f"id:{self.id}, name: {self.name}, functions: {self.func}")
         
     def __call__(self, realization, start_index=None, end_index=None):
-<<<<<<< HEAD
-        return self.rule(realization=realization, start_index=start_index, end_index=end_index, **self.args)
-=======
         return self.func(realization, start_index, end_index, **self.args)
->>>>>>> da8654d8a43feb316c6f2d056f21be6479277659
     
 if __name__ == "__main__":
     rb = Rulebook()
