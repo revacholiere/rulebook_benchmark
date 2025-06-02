@@ -1,0 +1,28 @@
+#header
+1
+#rules
+0 "ped_collision" rule_ped_collision
+1 "vehicle_collision" rule_vehicle_collision
+2 "drivable_area" rule_drivable_area
+3 "ped_time_to_collision" rule_ped_time_to_collision
+4 "vehicle_time_to_collision" rule_vehicle_time_to_collision
+5 "correct_side_of_road" rule_correct_side_of_road
+6 "ped_clearance" rule_ped_clearance
+7 "vehicle_clearance" rule_vehicle_clearance
+8 "lane_keeping" rule_lane_keeping
+9 "speed_limit" rule_speed_limit
+10 "lane_centering" rule_lane_centering
+#same-level
+#priorities
+0 1
+1 2
+2 3
+2 4
+3 5
+4 5
+5 6
+5 7
+6 8
+7 8
+8 10
+10 9
