@@ -1,6 +1,6 @@
 param map = localPath('../maps/Town01.xodr')
 param carla_map = 'Town01'
-model scenic.simulators.carla.model
+model scenic.domains.driving.model
 
 
 behavior simple():
