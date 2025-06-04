@@ -319,16 +319,20 @@ class Rulebook:
             print("traj2_defended:", traj2_defended)
 
         if not traj1_worse_nodes and not traj2_worse_nodes:
-            print("Trajectories are equal.")
+            if self.verbosity >= 2:
+                print("Trajectories are equal.")
             return Relation.EQUAL
         elif (traj1_worse_nodes and traj1_defended) or not traj1_worse_nodes:
-            print("Trajectory 1 is better.")
+            if self.verbosity >= 2:
+                print("Trajectory 1 is better.")
             return Relation.LARGER
         elif (traj2_worse_nodes and traj2_defended) or not traj2_worse_nodes:
-            print("Trajectory 2 is better.")
+            if self.verbosity >= 2:
+                print("Trajectory 2 is better.")
             return Relation.SMALLER
         else:
-            print("Trajectories are non-comparable.")
+            if self.verbosity >= 2:
+                print("Trajectories are non-comparable.")
             return Relation.NONCOMPARABLE
     
     def visualize_rulebook(self, output_file_name="merged_rule_graph.png"):
