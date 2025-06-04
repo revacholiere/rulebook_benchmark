@@ -456,6 +456,7 @@ def trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs):
     
     
 def buffer_clearance_rule(realization, step, **kwargs):
+    pass
 
 
 
