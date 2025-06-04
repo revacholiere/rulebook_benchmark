@@ -406,12 +406,12 @@ class Rulebook:
         return self.evaluate_trajectory_all(traj)
     
 class Rule:
-    def __init__(self, id, func, name="", description="", args={}):
+    def __init__(self, id, func, name="", description="", args=None):
         self.id = id
         self.func = func
         self.name = name
         self.description = description
-        self.args = args
+        self.args = args if args is not None else {}
     
     def print(self):
         print(f"id:{self.id}, name: {self.name}, functions: {self.func}")
