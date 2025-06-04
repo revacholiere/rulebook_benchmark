@@ -15,33 +15,6 @@ class Realization():
         except IndexError:
             raise Exception(f"Error: Ego index {self.ego_index} not found in objects list")
 
-    def get_object(self, object_index):
-        try:
-            return self.objects[object_index]
-        except IndexError:
-            raise Exception(f"Error: Object index {object_index} not found in objects list")
-        
-    def get_object_non_ego(self, object_index):
-        try:
-            return self.objects_non_ego[object_index]
-        except IndexError:
-            raise Exception(f"Error: Object index {object_index} not found in non-ego objects list")
-
-    def get_object_state(self, object_index, step): 
-        if 0 <= object_index < len(self.objects):
-            return self.objects[object_index].get_state(step)
-        else:
-            raise Exception(f"Error: Object index {object_index} not found in objects list")
-        
-    def get_object_non_ego_state(self, object_index, step):
-        if 0 <= object_index < len(self.objects_non_ego):
-            return self.objects_non_ego[object_index].get_state(step)
-        else:
-            raise Exception(f"Error: Object index {object_index} not found in non-ego objects list")
-
-    def get_ego_state(self, step):
-        return self.get_ego().get_state(step)
-
     def get_world_state(self, step):
         states = []
         for i in range(len(self.objects)):
@@ -77,6 +50,10 @@ class Realization():
                 vehicles.append(obj)
         return vehicles
     
+    @property
+    def vehicles_non_ego(self):
+        return self.vehicles[:self.ego_index] + self.vehicles[self.ego_index + 1:]
+    
     @cached_property
     def VRUs(self):
         VRUs = []
@@ -100,12 +77,13 @@ class RealizationObject():
             raise Exception(f"Error: Step {step} not found in object trajectory")
         
     def get_polygon(self, state):
-        return MeshVolumeRegion(mesh=self.mesh, position=state.position, rotation=state.orientation_trimesh, dimensions=self.dimensions).boundingPolygon.polygons
+        return MeshVolumeRegion(mesh=self.mesh, position=state.position, rotation=state.orientation, dimensions=self.dimensions).boundingPolygon.polygons
         
 
 
 class State():
-    def __init__(self, position, velocity, orientation, step):
+    def __init__(self, obj, position, velocity, orientation, step):
+        self.object = obj
         self.position = position
         self.velocity = velocity
         self.orientation = orientation
@@ -115,6 +93,11 @@ class State():
     @property
     def orientation_trimesh(self):
         return self.orientation._trimeshEulerAngles()
+    @property
+    def polygon(self):
+        return self.object.get_polygon(self)
+    
+
 
 
 class WorldState():
@@ -122,26 +105,26 @@ class WorldState():
         self.ego_index = ego_index
         self.states = states
         self.step = step
+        
+    def __getitem__(self, index):
+        if index < 0 or index >= len(self.states):
+            raise IndexError(f"Index {index} out of bounds for states list")
+        return self.states[index]
 
     def get_ego_state(self):
-        try:
-            return self.states[self.ego_index]
-        except IndexError:
-            raise Exception(f"Error: Ego index {self.ego_index} not found in states list")
-
-    def get_object_state(self, object_index):
-        try:
-            return self.states[object_index]
-        except IndexError:
-            raise Exception(f"Error: Object index {object_index} not found in states list")
+        return self[self.ego_index]
 
     @property
-    def states_non_ego(self):
+    def other_states(self):
         return self.states[:self.ego_index] + self.states[self.ego_index + 1:]
-
-
-
-
+    @property
+    def other_vehicle_states(self):
+        return [state for state in self.other_states if state.object.object_type in ["Car", "Truck"]]
+    @property
+    def ego_state(self):
+        return self.get_ego_state()
+    
+    
 
 
 
