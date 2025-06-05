@@ -319,7 +319,7 @@ def project_point_to_linestring(ls: shapely.LineString, point: shapely.Point):
 def project_polygon_to_linestring(ls: shapely.LineString, polygon: shapely.Polygon):
     x = ls.project(polygon.centroid)
     projected_point = ls.interpolate(x)
-    y = projected_point.distance(polygon)
+    y = ls.distance(polygon)
     return x, y, projected_point
     
 
@@ -395,7 +395,7 @@ def trajectory_clearance_rule(realization, step, **kwargs):
     if len(candidate_object_states) == 0:
         return 0
     
-    ls = trajectory_to_lineString(realization.get_trajectory(ego_state.object, step))
+    ls = trajectory_to_lineString(ego_state.object.trajectory, step)
     if kwargs.get("side", "front") == "front":
         return trajectory_front_clearance(ego_state, candidate_object_states, ls, **kwargs)
     else:
@@ -420,7 +420,7 @@ def get_side_vehicles(ego_state, candidate_object_states, ls, side, margin):
         angle = orientation_vector.angleWith(obj_vector)
         x, y, projected_point = project_polygon_to_linestring(ls, obj_state.polygon)
         
-        if y > (ego_state.obj.dimensions[0]/2 + margin): # vehicle is too far away
+        if y < (ego_state.obj.dimensions[0]/2 + margin):
             continue
 
         if math.pi > angle > 0 and side == "left":
@@ -454,9 +454,24 @@ def trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs):
 
     
     
-    
+
 def buffer_clearance_rule(realization, step, **kwargs):
-    pass
+    world_state = realization.get_world_state(step)
+    ego_state = world_state.ego_state
+    other_vehicle_states = world_state.other_vehicle_states
+    side = kwargs.get("side", "front")    
+    candidate_object_states = proximity_filter(other_vehicle_states, ego_state, kwargs.get("proximity", 10))
+    if len(candidate_object_states) == 0:
+        return 0
+    
+    front_trajectory = ego_state.object.trajectory[step:]
+    front_ls = trajectory_to_lineString(front_trajectory)
+    front_buffer_polygon = front_ls.buffer(kwargs.get("buffer", 1), cap_style=shapely.CAP_STYLE.flat)
+    
+
+
+        
+    
 
 
 
