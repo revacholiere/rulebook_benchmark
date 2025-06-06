@@ -177,7 +177,7 @@ class Rulebook:
         
     def remove_rule(self, rule_id):
         """
-        Removes a rule from the rulebook. The predcessors and successors will be connected.
+        Removes a rule from the rulebook. The predecessors and successors will be connected.
         """
         if rule_id not in self.rule_ids:
             raise ValueError(f"Rule ID {rule_id} not found in the priority graph.")
@@ -231,7 +231,7 @@ class Rulebook:
     
     def get_rule_relation(self, rule_id_1, rule_id_2, to_print=False):
         """
-        Returns the priority relation bewteen rule 1 and rule 2.
+        Returns the priority relation between rule 1 and rule 2.
         """
         if rule_id_1 not in self.rule_ids or rule_id_2 not in self.rule_ids:
             if to_print:
