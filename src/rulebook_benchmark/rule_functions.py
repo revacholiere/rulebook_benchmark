@@ -5,10 +5,9 @@ from rulebook_benchmark.realization import Realization, State, RealizationObject
 import math
 from scenic.core.vectors import Vector
 from rulebook_benchmark.rulebook import Rule
-
+import numpy as np
 
 # TODO: shapely vs scenic distances , same for velocity/acceleration scale
-
 
 class Result:
     def __init__(self, minimum_violation=0, aggregation_method=max):
@@ -54,10 +53,6 @@ def rule_function(calculate_violation, aggregation_method):
         return result
     
     return wrapper
-    
-
-
-    
     
 def rule_collision(realization, object_type="Pedestrian", start_index=None, end_index=None):
     # re-write the function to use the new realization object
@@ -114,12 +109,96 @@ def rule_vehicle_collision(realization, start_index=None, end_index=None):
 
 def rule_vru_collision(realization, start_index=None, end_index=None):
     return max(rule_collision(realization, "Pedestrian", start_index=start_index, end_index=end_index), rule_collision(realization, "Bicycle", start_index=start_index, end_index=end_index))
+
+def rule_vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04):
     
+    def check_intersection(vehicle_polygon, pedestrian_polygon, velocity, step_size=step_size, threshold_time=threshold):
+        vx, vy = velocity
+        num_steps = int(threshold_time / step_size)
+        for step in range(num_steps):
+            current_time = step * step_size
+            dx = vx * step_size
+            dy = vy * step_size
+            vehicle_polygon = shapely.affinity.translate(vehicle_polygon, xoff=dx, yoff=dy)
+            if vehicle_polygon.intersects(pedestrian_polygon):
+                return True, current_time
+            
+        return False, threshold_time
     
+    ego = realization.get_ego()
+    ego_state = ego.get_state(step)
+    ego_polygon = ego_state.polygon
+    ego_velocity = (ego_state.velocity[0], ego_state.velocity[1])
+    
+    objects = [obj for obj in realization.objects_non_ego]
+    violation = 0
+    
+    for obj in objects:
+        if obj.object_type not in ["Pedestrian", "Bicycle"]:
+            continue
+        obj_state = obj.get_state(step)
+        obj_polygon = obj_state.polygon
+        to_collide, ttc = check_intersection(ego_polygon, obj_polygon, ego_velocity, step_size=step_size, threshold_time=threshold)
+        if to_collide:
+            assert ttc <= threshold, f"TTC {ttc} exceeds threshold {threshold}"
+            violation = max(violation, threshold - ttc)
+        
+    return violation
 
-
-
-
+def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0.05):
+    
+    def check_intersection(ego_polygon, adv_polygon, ego_velocity, adv_velocity, step_size=step_size, threshold_time=threshold):
+        ego_vx, ego_vy = ego_velocity
+        adv_vx, adv_vy = adv_velocity
+        num_steps = int(threshold_time / step_size)
+        min_dist = float("inf")
+        for step in range(num_steps):
+            current_time = step * step_size
+            dx = ego_vx * step_size
+            dy = ego_vy * step_size
+            ego_polygon = shapely.affinity.translate(ego_polygon, xoff=dx, yoff=dy)
+            adv_dx = adv_vx * step_size
+            adv_dy = adv_vy * step_size
+            adv_polygon = shapely.affinity.translate(adv_polygon, xoff=adv_dx, yoff=adv_dy)
+            min_dist = min(min_dist, shapely.distance(ego_polygon, adv_polygon))
+            if ego_polygon.intersects(adv_polygon):
+                return True, current_time
+        return False, threshold_time
+    
+    def check_orientation(ego_position, adv_position, ego_velocity):
+        """
+        Check if the ego vehicle is moving towards the other vehicle.
+        """
+        relative_position = (adv_position[0] - ego_position[0], adv_position[1] - ego_position[1])
+        if np.dot(relative_position, ego_velocity) < 0:
+            return False
+        return True
+    
+    ego = realization.get_ego()
+    ego_state = ego.get_state(step)
+    ego_polygon = ego_state.polygon
+    ego_position = (ego_state.position[0], ego_state.position[1])
+    ego_velocity = (ego_state.velocity[0], ego_state.velocity[1])
+    
+    objects = [obj for obj in realization.objects_non_ego]
+    violation = 0
+    
+    for obj in objects:
+        if obj.object_type not in ["Car", "Truck"]:
+            continue
+        obj_state = obj.get_state(step)
+        obj_polygon = obj_state.polygon
+        obj_position = (obj_state.position[0], obj_state.position[1])
+        obj_velocity = (obj_state.velocity[0], obj_state.velocity[1])
+        if not check_orientation(ego_position, obj_position, ego_velocity):
+            continue
+        to_collide, ttc = check_intersection(ego_polygon, obj_polygon, ego_velocity, obj_velocity, step_size=step_size, threshold_time=threshold)
+        if to_collide:
+            assert ttc <= threshold, f"TTC {ttc} exceeds threshold {threshold}"
+            violation = max(violation, threshold - ttc)
+       
+    return violation
+    
 # TODO: haussdorf distance does not work, use distance + intersection perhaps?
 def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
     violation_history = []
@@ -151,8 +230,6 @@ def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
         
     return violation_score, violation_history
 
-
-
 def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, end_index=None):
     violation_history = []
     
@@ -183,19 +260,12 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
             
     return violation_score, violation_history
     
-
-
-
 def vru_clearance_on_road(realization, start_index=None, end_index=None, threshold = 6):
     return vru_clearance(realization, on_road=True, start_index=start_index, end_index=end_index, threshold = threshold)
 
-
 def vru_clearance_off_road(realization, start_index=None, end_index=None, threshold = 6):
     return vru_clearance(realization, on_road=False, start_index=start_index, end_index=end_index, threshold = threshold)
-
-
-                
-                
+         
 def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, start_index=None, end_index=None):
     if start_index is None:
         start_index = 0
@@ -240,13 +310,7 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
     violation_history += timesteps * [violation_score]
     return violation_score, violation_history
 
-        
-                
-
-        
-
 # TODO: vehicle yielding rule based on adv vehicle decelerations
-
 
 def road_correct_side(realization, start_index=None, end_index=None):
     violation_history = []
@@ -280,10 +344,6 @@ def road_correct_side(realization, start_index=None, end_index=None):
     violation_score = sum(violation_history)
     return violation_score, violation_history
 
-
-        
-
-
 def rule_15(realization, step, threshold=10): # speed limit
     ego_velocity = realization.get_ego_state(step).velocity.norm()
     return max(0, ego_velocity - threshold)**2
@@ -298,17 +358,12 @@ def rule_18(realization, step): # lane centering
     distance = centerline.distance(ego_pos_point)
     return distance
 
-
-
-
-
-# TODO: vehicle yielding rule10, VRU TTC rule 4, vehicle TTC rule6, parked vehicle rule 14, turn signal rule 16
+# TODO: vehicle yielding rule10, parked vehicle rule 14, turn signal rule 16
 # TODO: lane keeping rule 17, following distance rule 19
 
 def trajectory_to_lineString(trajectory):
     return shapely.LineString([(state.position.x, state.position.y) for state in trajectory])
-
-        
+     
 def project_point_to_linestring(ls: shapely.LineString, point: shapely.Point):
     x = ls.project(point)
     projected_point = ls.interpolate(x)
@@ -320,8 +375,7 @@ def project_polygon_to_linestring(ls: shapely.LineString, polygon: shapely.Polyg
     x = ls.project(polygon.centroid)
     projected_point = ls.interpolate(x)
     y = ls.distance(polygon)
-    return x, y, projected_point
-    
+    return x, y, projected_point   
 
 def polygon_distance(x_state, y_state):
     x_polygon = x_state.object.get_polygon(x_state)
@@ -362,7 +416,6 @@ def to_shapely_point(vector):
     """
     return shapely.Point(vector.x, vector.y)
 
-
 def get_front_vehicle(ego_state, candidate_object_states, ls, margin):
     """
     Finds the front vehicle in the candidate objects based on the ego vehicle's trajectory.
@@ -385,7 +438,6 @@ def get_front_vehicle(ego_state, candidate_object_states, ls, margin):
     
     return front_state
         
-
 def trajectory_clearance_rule(realization, step, **kwargs):
     world_state = realization.get_world_state(step)
     ego_state = world_state.ego_state
@@ -401,14 +453,12 @@ def trajectory_clearance_rule(realization, step, **kwargs):
     else:
         return trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs)
 
-
 def trajectory_front_clearance(ego_state, candidate_object_states, ls, **kwargs):
     front_vehicle_state = get_front_vehicle(ego_state, candidate_object_states, ls, kwargs.get("margin", 1))
     if front_vehicle_state is None:
         return 0
     violation = max(0, kwargs.get("threshold", 5) - polygon_distance(ego_state, front_vehicle_state))
     return violation
-
 
 def get_side_vehicles(ego_state, candidate_object_states, ls, side, margin):
     orientation = ego_state.orientation.yaw
@@ -448,13 +498,6 @@ def trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs):
         
     return violation
     
-    
-    
-
-
-    
-    
-
 def buffer_clearance_rule(realization, step, **kwargs):
     world_state = realization.get_world_state(step)
     ego_state = world_state.ego_state
@@ -467,26 +510,3 @@ def buffer_clearance_rule(realization, step, **kwargs):
     front_trajectory = ego_state.object.trajectory[step:]
     front_ls = trajectory_to_lineString(front_trajectory)
     front_buffer_polygon = front_ls.buffer(kwargs.get("buffer", 1), cap_style=shapely.CAP_STYLE.flat)
-    
-
-
-        
-    
-
-
-
-      
-
-
-     
-    
-    
-    
-    
-        
-        
-
-    
-    
-
-
