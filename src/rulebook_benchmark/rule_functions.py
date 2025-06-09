@@ -39,21 +39,24 @@ def rule_function(calculate_violation, aggregation_method):
             start_index = 0
         
         result.violation_history += [0] * start_index
-        max_steps = realization.max_steps
+        max_steps = len(realization.get_ego().trajectory) - 1
+        #max_steps = realization.max_steps
         
         if end_index is None:
             end_index = max_steps
             
         violation_score = 0
         for i in range(start_index, end_index + 1):
-            violation_score, carryover = calculate_violation(realization, i, carryover=carryover, **parameters)
+            violation_score = calculate_violation(realization, i, **parameters)
+            #violation_score, carryover = calculate_violation(realization, i, carryover=carryover, **parameters)
             result.add(violation_score)
                     
         result.violation_history += [result.total_violation] * (max_steps - end_index)
         return result
     
     return wrapper
-    
+
+"""  
 def rule_collision(realization, object_type="Pedestrian", start_index=None, end_index=None):
     # re-write the function to use the new realization object
     violation_history = [0]
@@ -109,6 +112,81 @@ def rule_vehicle_collision(realization, start_index=None, end_index=None):
 
 def rule_vru_collision(realization, start_index=None, end_index=None):
     return max(rule_collision(realization, "Pedestrian", start_index=start_index, end_index=end_index), rule_collision(realization, "Bicycle", start_index=start_index, end_index=end_index))
+"""
+
+def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70):
+    ego = realization.get_ego()
+    ego_state = ego.get_state(step)
+    ego_polygon = ego_state.polygon
+    ego_velocity = (ego_state.velocity[0], ego_state.velocity[1])
+    
+    objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Pedestrian", "Bicycle"]]
+    violation = 0
+    
+    for obj in objects:
+        obj_state = obj.get_state(step)
+        obj_polygon = obj_state.polygon
+        obj_velocity = (obj_state.velocity[0], obj_state.velocity[1])
+        if not ego_polygon.intersects(obj_polygon):
+            continue
+        if step > 0:
+            if shapely.intersects(ego.get_state(step - 1).polygon, obj.get_state(step - 1).polygon):
+                continue
+        # Collision starts at this step
+        for i in range(step + 1, len(ego.trajectory)):
+            next_ego_state = ego.get_state(i)
+            next_obj_state = obj.get_state(i)
+            next_ego_polygon = next_ego_state.polygon
+            next_obj_polygon = next_obj_state.polygon
+            if shapely.intersects(next_ego_polygon, next_obj_polygon) and i < len(ego.trajectory) - 1:
+                # Collision continues
+                continue
+            # Collision ends at the i-th step
+            ego_after_velocity = (next_ego_state.velocity[0], next_ego_state.velocity[1])
+            obj_after_velocity = (next_obj_state.velocity[0], next_obj_state.velocity[1])
+            current_violation = 0.5 * car_mass * (np.linalg.norm(ego_velocity) ** 2 - np.linalg.norm(ego_after_velocity) ** 2) + \
+                                0.5 * vru_mass * (np.linalg.norm(obj_after_velocity) ** 2 - np.linalg.norm(obj_velocity) ** 2)
+            violation = max(violation, current_violation)
+            break
+    
+    return violation
+
+def rule_vehicle_collision(realization, step, car_mass=1500):
+    ego = realization.get_ego()
+    ego_state = ego.get_state(step)
+    ego_polygon = ego_state.polygon
+    ego_velocity = (ego_state.velocity[0], ego_state.velocity[1])
+    
+    objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Car", "Truck"]]
+    violation = 0
+    
+    for obj in objects:
+        obj_state = obj.get_state(step)
+        obj_polygon = obj_state.polygon
+        obj_velocity = (obj_state.velocity[0], obj_state.velocity[1])
+        if not ego_polygon.intersects(obj_polygon):
+            continue
+        if step > 0:
+            if shapely.intersects(ego.get_state(step - 1).polygon, obj.get_state(step - 1).polygon):
+                continue
+        # Collision starts at this step
+        for i in range(step + 1, len(ego.trajectory)):
+            next_ego_state = ego.get_state(i)
+            next_obj_state = obj.get_state(i)
+            next_ego_polygon = next_ego_state.polygon
+            next_obj_polygon = next_obj_state.polygon
+            if shapely.intersects(next_ego_polygon, next_obj_polygon) and i < len(ego.trajectory) - 1:
+                # Collision continues
+                continue
+            # Collision ends at the i-th step
+            ego_after_velocity = (next_ego_state.velocity[0], next_ego_state.velocity[1])
+            obj_after_velocity = (next_obj_state.velocity[0], next_obj_state.velocity[1])
+            current_violation = 0.5 * car_mass * (np.linalg.norm(ego_velocity) ** 2 - np.linalg.norm(ego_after_velocity) ** 2) + \
+                                0.5 * car_mass * (np.linalg.norm(obj_velocity) ** 2 - np.linalg.norm(obj_after_velocity) ** 2)
+            violation = max(violation, current_violation)
+            break
+    
+    return violation
 
 def rule_vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04):
     
