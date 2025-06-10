@@ -280,7 +280,7 @@ def rule_vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04)
 def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0.05):
     
     def check_intersection(ego_polygon, adv_polygon, ego_velocity, adv_velocity, step_size=step_size, threshold_time=threshold):
-        ego_vx, ego_vy = ego_velocity
+        ego_vx, ego_vy = ego_velocity # this may get "too many values to unpack" error, see test.ipynb code blocks 3, 4, 5
         adv_vx, adv_vy = adv_velocity
         num_steps = int(threshold_time / step_size)
         min_dist = float("inf")
@@ -297,12 +297,12 @@ def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0
                 return True, current_time
         return False, threshold_time
     
-    def check_orientation(ego_position, adv_position, ego_velocity):
+    def check_orientation(ego_position, adv_position, ego_velocity): # maybe we can do this with line intersection?
         """
         Check if the ego vehicle is moving towards the other vehicle.
         """
-        relative_position = (adv_position[0] - ego_position[0], adv_position[1] - ego_position[1])
-        if np.dot(relative_position, ego_velocity) < 0:
+        relative_position = (adv_position[0] - ego_position[0], adv_position[1] - ego_position[1]) 
+        if np.dot(relative_position, ego_velocity) < 0: # does this confirm that the ego vehicle is moving towards the other vehicle?
             return False
         return True
     
