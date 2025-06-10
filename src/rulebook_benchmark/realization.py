@@ -61,6 +61,7 @@ class Realization():
             if obj.object_type == "Pedestrian" or obj.object_type == "Cyclist":
                 VRUs.append(obj)
         return VRUs
+    
 
 
 class RealizationObject():

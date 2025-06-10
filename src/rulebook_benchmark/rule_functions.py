@@ -114,7 +114,8 @@ def rule_vru_collision(realization, start_index=None, end_index=None):
     return max(rule_collision(realization, "Pedestrian", start_index=start_index, end_index=end_index), rule_collision(realization, "Bicycle", start_index=start_index, end_index=end_index))
 """
 
-def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70):
+def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70): # looks good, but the normalization can be done with Scenic's built-in functions? also, maybe the timestep right before collision could be a starting point?
+    # also, we could unify the VRU and vehicle rules and add a parameter?
     ego = realization.get_ego()
     ego_state = ego.get_state(step)
     ego_polygon = ego_state.polygon
@@ -187,6 +188,59 @@ def rule_vehicle_collision(realization, step, car_mass=1500):
             break
     
     return violation
+
+def rule_collision_modified(realization, step, object_type="Pedestrian", car_mass=1500, vru_mass=70):
+    if object_type in ["Pedestrian", "Bicycle"]:
+        mass = vru_mass
+        objects = realization.VRUs
+    elif object_type in ["Car", "Truck"]:
+        mass = car_mass
+        objects = realization.vehicles_non_ego
+    else:
+        raise ValueError(f"Invalid object type: {object_type}. Must be 'Pedestrian', 'Bicycle', 'Car' or 'Truck'.")
+    
+    ego = realization.get_ego()
+    violation = 0
+    
+    for obj in objects:
+        obj_state = obj.get_state(step)
+        obj_polygon = obj_state.polygon
+        ego_state = ego.get_state(step)
+        ego_polygon = ego_state.polygon
+        
+        if not ego_polygon.intersects(obj_polygon):
+            continue
+        
+        if step > 0:
+            if shapely.intersects(ego.get_state(step - 1).polygon, obj.get_state(step - 1).polygon):
+                continue
+        
+        ego_before = ego.get_state(step-1) # state before collision
+        obj_before = obj.get_state(step-1)
+        
+        kinetic_energy_before = 0.5 * mass * (ego_before.velocity.norm()) + 0.5 * mass * (obj_before.velocity.norm())
+        
+        # Collision starts at this step
+        for i in range(step + 1, len(ego.trajectory) - 1):
+            next_ego_state = ego.get_state(i)
+            next_obj_state = obj.get_state(i)
+            next_ego_polygon = next_ego_state.polygon
+            next_obj_polygon = next_obj_state.polygon
+            
+            if shapely.intersects(next_ego_polygon, next_obj_polygon) and i < len(ego.trajectory) - 1:
+                # Collision continues
+                continue
+            
+            # Collision ends at the i-th step
+            kinetic_energy_after = 0.5 * mass * (next_ego_state.velocity.norm() ** 2) + 0.5 * mass * (next_obj_state.velocity.norm() ** 2)
+            violation = max(violation, kinetic_energy_before - kinetic_energy_after)
+            
+                        
+
+    
+    
+
+
 
 def rule_vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04):
     
