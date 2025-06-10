@@ -189,15 +189,15 @@ def rule_vehicle_collision(realization, step, car_mass=1500):
     
     return violation
 
-def rule_collision_modified(realization, step, object_type="Pedestrian", car_mass=1500, vru_mass=70):
-    if object_type in ["Pedestrian", "Bicycle"]:
+def rule_collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_mass=70):
+    if object_type == "Vehicle":
         mass = vru_mass
         objects = realization.VRUs
-    elif object_type in ["Car", "Truck"]:
+    elif object_type == "VRU":
         mass = car_mass
         objects = realization.vehicles_non_ego
     else:
-        raise ValueError(f"Invalid object type: {object_type}. Must be 'Pedestrian', 'Bicycle', 'Car' or 'Truck'.")
+        raise ValueError(f"Invalid object type: {object_type}. Must be 'Vehicle' or 'VRU'.")
     
     ego = realization.get_ego()
     violation = 0
