@@ -517,6 +517,9 @@ def get_front_vehicle(ego_state, candidate_object_states, ls, margin):
     return front_state
         
 def trajectory_clearance_rule(realization, step, **kwargs):
+    side = kwargs.get("side", "left")
+    margin = kwargs.get("margin", 1)
+    threshold = kwargs.get("threshold", 5)
     world_state = realization.get_world_state(step)
     ego_state = world_state.ego_state
     other_vehicle_states = world_state.other_vehicle_states
@@ -526,16 +529,18 @@ def trajectory_clearance_rule(realization, step, **kwargs):
         return 0
     
     ls = trajectory_to_lineString(ego_state.object.trajectory, step)
-    if kwargs.get("side", "front") == "front":
-        return trajectory_front_clearance(ego_state, candidate_object_states, ls, **kwargs)
-    else:
+    if side == "front":
+        return trajectory_front_clearance(ego_state, candidate_object_states, ls, threshold, margin)
+    elif side in ["left", "right"]:
         return trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs)
+    else:
+        raise ValueError(f"Invalid side: {side}. Must be 'front', 'left' or 'right'.")
 
-def trajectory_front_clearance(ego_state, candidate_object_states, ls, **kwargs):
-    front_vehicle_state = get_front_vehicle(ego_state, candidate_object_states, ls, kwargs.get("margin", 1))
+def trajectory_front_clearance(ego_state, candidate_object_states, ls, threshold, margin):
+    front_vehicle_state = get_front_vehicle(ego_state, candidate_object_states, ls, margin)
     if front_vehicle_state is None:
         return 0
-    violation = max(0, kwargs.get("threshold", 5) - polygon_distance(ego_state, front_vehicle_state))
+    violation = max(0, threshold - polygon_distance(ego_state, front_vehicle_state))
     return violation
 
 def get_side_vehicles(ego_state, candidate_object_states, ls, side, margin):
@@ -551,22 +556,16 @@ def get_side_vehicles(ego_state, candidate_object_states, ls, side, margin):
         if y < (ego_state.obj.dimensions[0]/2 + margin):
             continue
 
-        if math.pi > angle > 0 and side == "left":
+        if math.pi >= angle >= 0 and side == "left":
             side_vehicles.append(obj_state)
         elif -math.pi < angle < 0 and side == "right":
             side_vehicles.append(obj_state)
-        elif angle == 0 or angle == math.pi:
-            # vehicle is directly in front or behind, ignore
-            continue
     return side_vehicles
 
-def trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs):
-    side = kwargs.get("side", "left")
-    margin = kwargs.get("margin", 1)
-    threshold = kwargs.get("threshold", 5)
-        
+def trajectory_side_clearance(ego_state, candidate_object_states, ls, side, threshold, margin):
+
     side_vehicles = get_side_vehicles(ego_state, candidate_object_states, ls, side, margin)
-    
+
     if len(side_vehicles) == 0:
         return 0
     
@@ -575,16 +574,80 @@ def trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs):
         violation = max(0, threshold - polygon_distance(ego_state, obj_state), violation)
         
     return violation
+
+def buffer_get_front_vehicle(candidate_object_states, front_ls):
+
+    front_state = None
+    min_distance = float("inf")
     
+    for obj_state in candidate_object_states:
+        obj_polygon = obj_state.polygon
+        x, y, projected_point = project_polygon_to_linestring(front_ls, obj_polygon)
+        if x < min_distance:
+            min_distance = x
+            front_state = obj_state
+    
+    return front_state
+
+def buffer_front_clearance(ego_state, candidate_object_states, front_ls, threshold):
+    front_state = buffer_get_front_vehicle(ego_state, candidate_object_states, front_ls)
+    
+    if front_state is None:
+        return 0
+    
+    violation = max(0, threshold - polygon_distance(ego_state, front_state))
+    return violation
+
+def buffer_side_clearance(ego_state, candidate_object_states, side, margin, threshold, proximity):
+    buffer_size = ego_state.object.dimensions[0]/2 + margin
+    side_buffer_size = proximity
+    if side == "right":
+        side_buffer_size *= -1
+        
+    ego_ls = trajectory_to_lineString(ego_state.object.trajectory)
+    traj_buffer_polygon = ego_ls.buffer(buffer_size, cap_style=shapely.CAP_STYLE.flat)
+    side_buffer_polygon = ego_ls.buffer(side_buffer_size, cap_style=shapely.CAP_STYLE.flat, single_sided=True)
+    side_buffer_polygon = side_buffer_polygon.difference(traj_buffer_polygon)
+
+    violation = 0
+    for obj_state in candidate_object_states:
+        if side_buffer_polygon.intersects(obj_state.polygon):
+            violation = max(0, threshold - polygon_distance(ego_state, obj_state), violation)            
+
+    return violation
+
 def buffer_clearance_rule(realization, step, **kwargs):
     world_state = realization.get_world_state(step)
     ego_state = world_state.ego_state
+    ego_width = ego_state.object.dimensions[0]
+    threshold = kwargs.get("threshold", 5)
     other_vehicle_states = world_state.other_vehicle_states
-    side = kwargs.get("side", "front")    
-    candidate_object_states = proximity_filter(other_vehicle_states, ego_state, kwargs.get("proximity", 10))
+    proximity = kwargs.get("proximity", 10)
+    side = kwargs.get("side", "front")
+    margin = kwargs.get("margin", 1)
+    candidate_object_states = proximity_filter(other_vehicle_states, ego_state, proximity)
     if len(candidate_object_states) == 0:
         return 0
     
     front_trajectory = ego_state.object.trajectory[step:]
     front_ls = trajectory_to_lineString(front_trajectory)
-    front_buffer_polygon = front_ls.buffer(kwargs.get("buffer", 1), cap_style=shapely.CAP_STYLE.flat)
+    front_buffer_polygon = front_ls.buffer(ego_width/2 + margin, cap_style=shapely.CAP_STYLE.flat)
+    
+    front_vehicles = []
+    side_vehicles = []
+    
+    for obj_state in candidate_object_states: # decide which side the vehicle is on
+        if front_buffer_polygon.intersects(obj_state.polygon):
+            front_vehicles.append(obj_state)
+        else:
+            side_vehicles.append(obj_state)
+    
+    if side == "front":
+        return buffer_front_clearance(ego_state, front_vehicles, front_buffer_polygon, threshold)
+    
+    elif side in ["left", "right"]:
+        return buffer_side_clearance(ego_state, side_vehicles, side, margin, threshold, proximity)
+    
+    else:
+        raise ValueError(f"Invalid side: {side}. Must be 'front', 'left' or 'right'.")
+            
