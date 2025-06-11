@@ -481,7 +481,8 @@ def rule_15(realization, step, threshold=10): # speed limit
     return max(0, ego_velocity - threshold)**2
 
 def rule_18(realization, step): # lane centering
-    ego_state = realization.get_ego_state(step)
+    ego = realization.get_ego()
+    ego_state = ego.get_state(step)
     ego_pos = ego_state.position
     
     centerline = realization.network.laneAt(ego_pos).centerline.lineString
