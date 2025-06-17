@@ -28,91 +28,6 @@ def firstPass(obj, lanes):  # process the states where the lane is not ambiguous
     return ambiguous_lanes
 
 
-def secondPassInitial(
-    obj, ambiguous_lanes
-):  # process the states where the lane is ambiguous, by checking previous and next states
-    for idx, lanes in ambiguous_lanes.items():
-        found = False
-        if lanes is None or lanes is []:
-            print("no lanes found", idx)
-            continue
-        if idx > 0:
-            prev_lane = obj.trajectory[idx - 1].lane
-            if prev_lane is not None:
-                for lane in lanes:
-                    #if (
-                    #    lane == prev_lane
-                    #):  # if one of the ambiguous lanes is the same as the previous lane, assign it #TODO: is this actually a good idea?
-                    #    obj.trajectory[idx].lane = lane
-                    #    print("found same lane as previous", idx)
-                    #    found = True
-                    #    break
-                    if (
-                        len(prev_lane.maneuvers) == 1
-                    ):  # one way to go from previous lane
-                        connecting_lane = prev_lane.maneuvers[0].connectingLane
-                        if connecting_lane == lane:
-                            obj.trajectory[idx].lane = lane
-                            print("found lane in previous lane's maneuver", idx)
-                            found = True
-                            break
-                if found:
-                    continue
-
-        j = idx + 1
-        while (
-            j < len(obj.trajectory) and obj.trajectory[j].lane is None
-        ):  # go forward to find next non-ambiguous lane
-            j += 1
-        k = idx - 1
-        while (
-            k >= 0 and ambiguous_lanes.get(k) is not None
-        ):  # go back to find last non-ambiguous lane
-            k -= 1
-
-        candidate_lanes = []
-        if j < len(
-            obj.trajectory
-        ):  # non-ambiguous lane or lane group found in the future
-            for lane in lanes:
-                for maneuver in lane.maneuvers:
-                    end_lane = maneuver.endLane
-                    future_lane = obj.get_state(j).lane
-                    if end_lane == future_lane and future_lane is not None:
-                        candidate_lanes.append(lane)
-                    elif end_lane.group == future_lane.group and future_lane is not None:
-                        candidate_lanes.append(lane)
-
-            if len(candidate_lanes) == 1:
-                obj.trajectory[idx].lane = candidate_lanes.pop()
-                continue
-            else:
-                print(len(candidate_lanes), "candidate lanes found in future")
-                print(candidate_lanes)
-
-        second_candidate_lanes = []
-        if (
-            j < len(obj.trajectory) and k >= 0
-        ):  # non-ambiguous lane or lane group found in the future and past
-            prev_lane = obj.get_state(k).lane
-            for maneuver in prev_lane.maneuvers:
-                end_lane = maneuver.endLane
-                future_lane = obj.get_state(j).lane
-
-        # no non-ambiguous lane found in the future, then find the lane with the closest orientation
-        angles = []
-        for lane in lanes:
-            lane_orientation = lane.orientation.value(obj.get_state(idx).position)
-            angles.append(abs(lane_orientation - obj.get_state(idx).orientation.yaw))
-        min_idx = angles.index(min(angles))
-        obj.trajectory[idx].lane = lanes[min_idx]
-        print("found lane with closest orientation", idx)
-
-        if obj.get_state(idx).lane is None:
-            print(lanes)
-            print("Error: could not find lane for state", idx)
-
-
 def secondPass(obj, ambiguous_lanes, network):
     for step, lanes in ambiguous_lanes.items():
         pos = obj.get_state(step).position
@@ -215,3 +130,15 @@ def process_trajectory(
             secondPass(obj, ambiguous_lanes, network)
 
         # print(f"Object {obj.object_type} {obj.mesh} has trajectory: {[state.lane for state in obj.trajectory]}")
+
+
+def process_trajectory_old(realization):
+    network = realization.network
+    
+    objects = realization.vehicles
+    for obj in objects:
+        for i in range(len(obj.trajectory)):
+            state = obj.get_state(i)
+            state.lane = network.laneAt(state.position)
+            #if state.lane is None:
+            #    print(f"Object {obj.object_type} {obj.mesh} is out of road at step {i}")

@@ -3,11 +3,19 @@ from cached_property import cached_property
 from scenic.core.regions import MeshVolumeRegion
 
 class Realization():
-    def __init__(self, max_steps, ego_index=0):
+    def __init__(self, ego_index=0, delta=0.1):
         self.network = None
         self.objects = None
-        self.max_steps = max_steps
         self.ego_index = ego_index
+        self.delta = delta
+
+    @property
+    def ego(self):
+        if not isinstance(self.ego_index, int):
+            raise Exception(f"Error: Ego index {self.ego_index} is not an integer")
+        if self.ego_index < 0 or self.ego_index >= len(self.objects):
+            raise Exception(f"Error: Ego index {self.ego_index} out of bounds for objects list of length {len(self.objects)}")
+        return self.objects[self.ego_index]
 
     def get_ego(self):
         try:
@@ -58,7 +66,7 @@ class Realization():
     def VRUs(self):
         VRUs = []
         for obj in self.objects:
-            if obj.object_type == "Pedestrian" or obj.object_type == "Cyclist":
+            if obj.object_type == "Pedestrian" or obj.object_type == "Bicycle":
                 VRUs.append(obj)
         return VRUs
     
@@ -94,7 +102,7 @@ class State():
     @property
     def orientation_trimesh(self):
         return self.orientation._trimeshEulerAngles()
-    @property
+    @cached_property
     def polygon(self):
         return self.object.get_polygon(self)
     
@@ -124,11 +132,9 @@ class WorldState():
     @property
     def ego_state(self):
         return self.get_ego_state()
+    @property
+    def vru_states(self):
+        return [state for state in self.states if state.object.object_type in ["Pedestrian", "Bicycle"]]
     
     
 
-
-
-
-
-# TODO: timesteps vs timestamps: multiple agents may be off sync/ does scenic use timestamps?
