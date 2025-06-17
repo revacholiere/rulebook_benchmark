@@ -39,7 +39,7 @@ def rule_function(calculate_violation, aggregation_method):
             start_index = 0
         
         result.violation_history += [0] * start_index
-        max_steps = len(realization.get_ego().trajectory) - 1
+        max_steps = len(realization.ego.trajectory) - 1
         #max_steps = realization.max_steps
         
         if end_index is None:
@@ -69,7 +69,7 @@ def rule_collision(realization, object_type="Pedestrian", start_index=None, end_
     if end_index is None:
         end_index = max_steps
     
-    ego = realization.get_ego()
+    ego = realization.ego
     objects = [obj for obj in realization.objects_non_ego if obj.object_type == object_type]
     total_violation = 0
     
@@ -116,7 +116,7 @@ def rule_vru_collision(realization, start_index=None, end_index=None):
 
 def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70): # looks good, but the normalization can be done with Scenic's built-in functions? also, maybe the timestep right before collision could be a starting point?
     # also, we could unify the VRU and vehicle rules and add a parameter?
-    ego = realization.get_ego()
+    ego = realization.ego
     ego_state = ego.get_state(step)
     ego_polygon = ego_state.polygon
     ego_velocity = (ego_state.velocity[0], ego_state.velocity[1])
@@ -153,7 +153,7 @@ def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70): # looks g
     return violation
 
 def rule_vehicle_collision(realization, step, car_mass=1500):
-    ego = realization.get_ego()
+    ego = realization.ego
     ego_state = ego.get_state(step)
     ego_polygon = ego_state.polygon
     ego_velocity = (ego_state.velocity[0], ego_state.velocity[1])
@@ -199,7 +199,7 @@ def rule_collision_modified(realization, step, object_type="VRU", car_mass=1500,
     else:
         raise ValueError(f"Invalid object type: {object_type}. Must be 'Vehicle' or 'VRU'.")
     
-    ego = realization.get_ego()
+    ego = realization.ego
     violation = 0
     
     for obj in objects:
@@ -257,7 +257,7 @@ def rule_vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04)
             
         return False, threshold_time
     
-    ego = realization.get_ego()
+    ego = realization.ego
     ego_state = ego.get_state(step)
     ego_polygon = ego_state.polygon
     ego_velocity = (ego_state.velocity[0], ego_state.velocity[1])
@@ -297,7 +297,7 @@ def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0
                 return True, current_time
         return False, threshold_time
     
-    def check_orientation(ego_position, adv_position, ego_velocity): # maybe we can do this with line intersection?
+    def check_orientation(ego_position, adv_position, ego_velocity): # what to do in the U-turn example?
         """
         Check if the ego vehicle is moving towards the other vehicle.
         """
@@ -306,7 +306,7 @@ def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0
             return False
         return True
     
-    ego = realization.get_ego()
+    ego = realization.ego
     ego_state = ego.get_state(step)
     ego_polygon = ego_state.polygon
     ego_position = (ego_state.position[0], ego_state.position[1])
@@ -332,6 +332,22 @@ def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0
     return violation
     
 # TODO: haussdorf distance does not work, use distance + intersection perhaps?
+
+def stay_in_drivable_area(realization, step, **kwargs):
+    ego = realization.ego
+    ego_state = ego.get_state(step)
+    drivable_region = realization.network.drivableRegion.polygons
+    
+    difference = ego_state.polygon.difference(drivable_region)
+    area = difference.area
+    
+    distance = shapely.distance(drivable_region, ego_state.polygon)
+    violation = area + distance**2
+    
+    return violation
+
+
+'''
 def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
     violation_history = []
     if start_index is None:
@@ -345,7 +361,7 @@ def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
         
     network = realization.network
     drivable_region = network.drivableRegion
-    ego = realization.get_ego()
+    ego = realization.ego
     violation_score = 0
     
     for i in range(start_index, end_index):
@@ -361,7 +377,30 @@ def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
         violation_history.append(violation_score)
         
     return violation_score, violation_history
+'''
 
+def vru_clearance(realization, step, **kwargs):
+    clearance_type = kwargs.get("clearance_type", "VRU")
+    world_state = realization.get_world_state(step)
+    threshold = kwargs.get("threshold", 5)
+    ego_state = world_state.ego_state
+    vru_states = world_state.vru_states
+    drivable_area = realization.network.drivableRegion.polygons
+    if clearance_type == "VRU_on_road":
+        vru_states = [vru for vru in vru_states if shapely.intersects(vru.polygon, drivable_area)]
+    elif clearance_type == "VRU_off_road":
+        vru_states = [vru for vru in vru_states if not shapely.intersects(vru.polygon, drivable_area)]
+    else:
+        return ValueError(f"Invalid clearance type: {clearance_type}. Must be 'VRU_on_road', 'VRU_off_road' or 'vehicle'.")
+    
+    violation = 0
+    for vru_state in vru_states:
+        vru_polygon = vru_state.polygon
+        distance = shapely.distance(ego_state.polygon, vru_polygon)
+        violation = max(violation, threshold - distance)
+    return violation
+    
+'''
 def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, end_index=None):
     violation_history = []
     
@@ -370,7 +409,7 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
         
     if end_index is None:
         end_index = realization.max_steps
-    ego = realization.get_ego()
+    ego = realization.ego
     objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Pedestrian", "Bicycle"]]
     drivable_region = realization.network.drivableRegion.polygons
     violation_score = 0
@@ -391,13 +430,52 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
             violation_history.append(violation_score)
             
     return violation_score, violation_history
-    
-def vru_clearance_on_road(realization, start_index=None, end_index=None, threshold = 6):
-    return vru_clearance(realization, on_road=True, start_index=start_index, end_index=end_index, threshold = threshold)
+'''
 
-def vru_clearance_off_road(realization, start_index=None, end_index=None, threshold = 6):
-    return vru_clearance(realization, on_road=False, start_index=start_index, end_index=end_index, threshold = threshold)
-         
+
+def vru_acknowledgement(realization, step, **kwargs):
+    proximity = kwargs.get("proximity", 5)
+    threshold = kwargs.get("threshold", 5)
+    timesteps = kwargs.get("timesteps", 10)
+    ego = realization.ego
+    vrus = realization.VRUs
+    
+    if step == 0:
+        return 0
+    
+    violation = 0
+    
+    
+    
+    for vru in vrus:
+        for i in range(step, min(step + timesteps, len(ego.trajectory))):
+            ego_state = ego.get_state(i)
+            vru_state = vru.get_state(i)
+            
+            dist = polygon_distance(ego_state, vru_state)
+            if dist < proximity:
+                ego_before_state = ego.get_state(step-1)
+                ego_before_velocity = ego_before_state.velocity
+                ego_after_state = ego.get_state(step)
+                ego_after_velocity = ego_after_state.velocity
+                vru_pos = vru.get_state(step).position
+                
+                relative_position = vru_pos - ego_after_state.position
+                acceleration = (ego_after_velocity - ego_before_velocity) / realization.delta
+                
+                acceleration_projection = (acceleration.dot(relative_position) / relative_position.norm()**2) * relative_position
+                violation = max(violation, acceleration_projection.norm() - threshold)
+                break
+    
+    return violation
+        
+        
+        
+    
+    
+    
+
+'''
 def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, start_index=None, end_index=None):
     if start_index is None:
         start_index = 0
@@ -407,7 +485,7 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
     
     
     violation_history = []
-    ego = realization.get_ego()
+    ego = realization.ego
     objects = [obj for obj in realization.objects_non_ego if obj.object_type in ["Pedestrian", "Bicycle"]]
     violation_score = 0
     
@@ -441,9 +519,22 @@ def vru_acknowledgement(realization, proximity=5, threshold=5,  timesteps=10, st
                 
     violation_history += timesteps * [violation_score]
     return violation_score, violation_history
-
+'''
 # TODO: vehicle yielding rule based on adv vehicle decelerations
 
+def correct_side(realization, step, **kwargs):
+    ego = realization.ego
+    ego_state = ego.get_state(step)
+    lane = ego_state.lane
+    if lane is None:
+        return 0
+    ego_orientation = ego_state.orientation.yaw
+    lane_orientation = lane.orientation.value(ego_state.position).yaw
+
+    if math.cos(lane_orientation - ego_orientation) < 0:
+        return 1
+    return 0
+'''
 def road_correct_side(realization, start_index=None, end_index=None):
     violation_history = []
     if start_index is None:
@@ -455,7 +546,7 @@ def road_correct_side(realization, start_index=None, end_index=None):
         end_index = max_steps
         
     network = realization.network
-    ego = realization.get_ego()
+    ego = realization.ego
     violation_score = 0
     
     for i in range(start_index, end_index):
@@ -475,17 +566,78 @@ def road_correct_side(realization, start_index=None, end_index=None):
         violation_history.append(violation)
     violation_score = sum(violation_history)
     return violation_score, violation_history
-
-def rule_15(realization, step, threshold=10): # speed limit
+'''
+def speed_limit(realization, step, threshold=10): # speed limit
     ego_velocity = realization.get_ego_state(step).velocity.norm()
     return max(0, ego_velocity - threshold)**2
 
-def rule_18(realization, step): # lane centering
-    ego = realization.get_ego()
+def lane_keeping(realization, step):
+    if step == 0:
+        return 0
+    ego = realization.ego
+    ego_state = ego.get_state(step)
+    ego_prev_state = ego.get_state(step - 1)
+    ego_lane = ego_state.lane
+    ego_prev_lane = ego_prev_state.lane
+    
+    if ego_lane == ego_prev_lane:
+        return 0
+    elif (ego_prev_lane is None and ego_lane is not None) or (ego_prev_lane is not None and ego_lane is None): # TODO: ask about this
+        return 1 
+    else:
+        for maneuver in ego_prev_lane.maneuvers:
+            if maneuver.endLane == ego_lane:
+                return 0
+        return 1
+    
+def jerk(realization, step):
+    if step == 0 or step == 1:
+        return 0
+    ego = realization.ego
+    ego_state = ego.get_state(step)
+    ego_prev_state = ego.get_state(step - 1)
+    ego_prev_prev_state = ego.get_state(step - 2)
+    ego_velocity = ego_state.velocity
+    ego_prev_velocity = ego_prev_state.velocity
+    ego_prev_prev_velocity = ego_prev_prev_state.velocity
+    acceleration = (ego_velocity - ego_prev_velocity) / realization.delta
+    prev_acceleration = (ego_prev_velocity - ego_prev_prev_velocity) / realization.delta
+    jerk_value = (acceleration - prev_acceleration).norm()
+    return jerk_value
+
+def longitudinal_acceleration(realization, step):
+    if step == 0:
+        return 0
+    ego = realization.ego
+    ego_state = ego.get_state(step)
+    ego_orientation = ego_state.orientation.yaw
+    ego_orientation_vector = Vector(math.cos(ego_orientation), math.sin(ego_orientation), 0).normalized()
+    ego_velocity = ego_state.velocity
+    ego_prev_state = ego.get_state(step - 1)
+    ego_prev_velocity = ego_prev_state.velocity
+    ego_acceleration = (ego_velocity - ego_prev_velocity) / realization.delta
+    longitudinal_acceleration = ego_acceleration.dot(ego_orientation_vector)
+    return longitudinal_acceleration.norm()
+
+def lateral_acceleration(realization, step):
+    if step == 0:
+        return 0
+    ego = realization.ego
+    ego_state = ego.get_state(step)
+    ego_orientation = ego_state.orientation.yaw + math.pi/2 # perpendicular to the orientation
+    ego_orientation_vector = Vector(math.cos(ego_orientation), math.sin(ego_orientation), 0).normalized()
+    ego_velocity = ego_state.velocity
+    ego_prev_state = ego.get_state(step - 1)
+    ego_prev_velocity = ego_prev_state.velocity
+    ego_acceleration = (ego_velocity - ego_prev_velocity) / realization.delta
+    lateral_acceleration = ego_acceleration.dot(ego_orientation_vector)
+    return abs(lateral_acceleration.norm())
+
+def lane_centering(realization, step): # lane centering
+    ego = realization.ego
     ego_state = ego.get_state(step)
     ego_pos = ego_state.position
-    
-    centerline = realization.network.laneAt(ego_pos).centerline.lineString
+    centerline = ego_state.lane.centerline.lineString
     # double check shapely distance function for sparse centerline
     ego_pos_point = shapely.Point(ego_pos.x, ego_pos.y)
     distance = centerline.distance(ego_pos_point)
