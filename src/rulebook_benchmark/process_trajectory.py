@@ -113,6 +113,25 @@ def secondPass(obj, ambiguous_lanes, network):
                 )
             min_idx = angles.index(min(angles))
             obj.trajectory[step].lane = lanes[min_idx]
+        else:
+            prev_lane = obj.get_state(step - 1).lane if step > 0 else None
+            if prev_lane is not None:
+                for lane in lanes:
+                    if prev_lane == lane or lane in [maneuver.endLane for maneuver in prev_lane.maneuvers]:
+                        obj.trajectory[step].lane = lane
+                        found = True
+                        #print("found same lane as previous", step)
+                        break
+            else:
+                angles = []
+                for lane in lanes:
+                    lane_orientation = lane.orientation.value(obj.get_state(step).position)
+                    angles.append(
+                        abs(lane_orientation - obj.get_state(step).orientation.yaw)
+                    )
+                min_idx = angles.index(min(angles))
+                obj.trajectory[step].lane = lanes[min_idx]
+                    
             #print("found lane with closest orientation", step)
 
 

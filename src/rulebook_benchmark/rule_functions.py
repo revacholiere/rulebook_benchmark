@@ -189,12 +189,12 @@ def rule_vehicle_collision(realization, step, car_mass=1500):
     
     return violation
 
-def rule_collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_mass=70):
+def collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_mass=70):
     if object_type == "Vehicle":
-        mass = vru_mass
+        mass = car_mass
         objects = realization.VRUs
     elif object_type == "VRU":
-        mass = car_mass
+        mass = vru_mass
         objects = realization.vehicles_non_ego
     else:
         raise ValueError(f"Invalid object type: {object_type}. Must be 'Vehicle' or 'VRU'.")
@@ -235,14 +235,20 @@ def rule_collision_modified(realization, step, object_type="VRU", car_mass=1500,
             kinetic_energy_after = 0.5 * mass * (next_ego_state.velocity.norm() ** 2) + 0.5 * mass * (next_obj_state.velocity.norm() ** 2)
             violation = max(violation, kinetic_energy_before - kinetic_energy_after)
             
-                        
+    return violation
+            
 
-    
-    
+def vru_collision(realization, step, **kwargs):
+    return collision_modified(realization, step, object_type="VRU", **kwargs)    
 
+f1 = rule_function(rule_vru_collision, max)             
 
+def vehicle_collision(realization, step, **kwargs):
+    return collision_modified(realization, step, object_type="Vehicle", **kwargs)
 
-def rule_vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04):
+f2 = rule_function(rule_vehicle_collision, max)
+
+def vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04):
     
     def check_intersection(vehicle_polygon, pedestrian_polygon, velocity, step_size=step_size, threshold_time=threshold):
         vx, vy = velocity
@@ -277,7 +283,9 @@ def rule_vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04)
         
     return violation
 
-def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0.05):
+f4 = rule_function(vru_time_to_collision, max)
+
+def vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0.05):
     
     def check_intersection(ego_polygon, adv_polygon, ego_velocity, adv_velocity, step_size=step_size, threshold_time=threshold):
         ego_vx, ego_vy = ego_velocity # this may get "too many values to unpack" error, see test.ipynb code blocks 3, 4, 5
@@ -331,6 +339,8 @@ def rule_vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0
        
     return violation
     
+f6 = rule_function(vehicle_time_to_collision, max)
+
 # TODO: haussdorf distance does not work, use distance + intersection perhaps?
 
 def stay_in_drivable_area(realization, step, **kwargs):
@@ -346,6 +356,7 @@ def stay_in_drivable_area(realization, step, **kwargs):
     
     return violation
 
+f3 = rule_function(stay_in_drivable_area, max)
 
 '''
 def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
@@ -382,7 +393,7 @@ def rule_stay_in_drivable_area(realization, start_index=None, end_index=None):
 def vru_clearance(realization, step, **kwargs):
     clearance_type = kwargs.get("clearance_type", "VRU")
     world_state = realization.get_world_state(step)
-    threshold = kwargs.get("threshold", 5)
+    threshold = kwargs.get("threshold", 2)
     ego_state = world_state.ego_state
     vru_states = world_state.vru_states
     drivable_area = realization.network.drivableRegion.polygons
@@ -400,6 +411,17 @@ def vru_clearance(realization, step, **kwargs):
         violation = max(violation, threshold - distance)
     return violation
     
+def vru_on_road_clearance(realization, step, **kwargs):
+    return vru_clearance(realization, step, clearance_type="VRU_on_road", **kwargs)
+
+def vru_off_road_clearance(realization, step, **kwargs):
+    return vru_clearance(realization, step, clearance_type="VRU_off_road", **kwargs)
+
+
+
+f8 = rule_function(vru_off_road_clearance, max)
+
+f9 = rule_function(vru_on_road_clearance, max)
 '''
 def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, end_index=None):
     violation_history = []
@@ -435,8 +457,8 @@ def vru_clearance(realization, on_road=False, threshold = 2, start_index=None, e
 
 def vru_acknowledgement(realization, step, **kwargs):
     proximity = kwargs.get("proximity", 5)
-    threshold = kwargs.get("threshold", 5)
-    timesteps = kwargs.get("timesteps", 10)
+    threshold = kwargs.get("threshold", 0)
+    timesteps = kwargs.get("timesteps", 30)
     ego = realization.ego
     vrus = realization.VRUs
     
@@ -461,9 +483,10 @@ def vru_acknowledgement(realization, step, **kwargs):
                 vru_pos = vru.get_state(step).position
                 
                 relative_position = vru_pos - ego_after_state.position
+                relative_position = relative_position.normalized()
                 acceleration = (ego_after_velocity - ego_before_velocity) / realization.delta
                 
-                acceleration_projection = (acceleration.dot(relative_position) / relative_position.norm()**2) * relative_position
+                acceleration_projection = float(acceleration.dot(relative_position)) * relative_position
                 violation = max(violation, acceleration_projection.norm() - threshold)
                 break
     
@@ -472,7 +495,7 @@ def vru_acknowledgement(realization, step, **kwargs):
         
         
     
-    
+f5 = rule_function(vru_acknowledgement, max)
     
 
 '''
@@ -529,11 +552,13 @@ def correct_side(realization, step, **kwargs):
     if lane is None:
         return 0
     ego_orientation = ego_state.orientation.yaw
-    lane_orientation = lane.orientation.value(ego_state.position).yaw
+    lane_orientation = lane.orientation.value(ego_state.position)
 
     if math.cos(lane_orientation - ego_orientation) < 0:
         return 1
     return 0
+
+f7 = rule_function(correct_side, sum)
 '''
 def road_correct_side(realization, start_index=None, end_index=None):
     violation_history = []
@@ -567,9 +592,11 @@ def road_correct_side(realization, start_index=None, end_index=None):
     violation_score = sum(violation_history)
     return violation_score, violation_history
 '''
-def speed_limit(realization, step, threshold=10): # speed limit
-    ego_velocity = realization.get_ego_state(step).velocity.norm()
+def speed_limit(realization, step, threshold=15): # speed limit
+    ego_velocity = realization.get_ego().get_state(step).velocity.norm()
     return max(0, ego_velocity - threshold)**2
+
+f15 = rule_function(speed_limit, max)
 
 def lane_keeping(realization, step):
     if step == 0:
@@ -586,10 +613,12 @@ def lane_keeping(realization, step):
         return 1 
     else:
         for maneuver in ego_prev_lane.maneuvers:
-            if maneuver.endLane == ego_lane:
+            if maneuver.endLane == ego_lane or maneuver.connectingLane == ego_lane:
                 return 0
         return 1
-    
+
+f17 = rule_function(lane_keeping, sum)    
+
 def jerk(realization, step):
     if step == 0 or step == 1:
         return 0
@@ -605,6 +634,9 @@ def jerk(realization, step):
     jerk_value = (acceleration - prev_acceleration).norm()
     return jerk_value
 
+f20 = rule_function(jerk, max)
+
+
 def longitudinal_acceleration(realization, step):
     if step == 0:
         return 0
@@ -618,6 +650,9 @@ def longitudinal_acceleration(realization, step):
     ego_acceleration = (ego_velocity - ego_prev_velocity) / realization.delta
     longitudinal_acceleration = ego_acceleration.dot(ego_orientation_vector)
     return longitudinal_acceleration.norm()
+
+
+f21 = rule_function(longitudinal_acceleration, max)
 
 def lateral_acceleration(realization, step):
     if step == 0:
@@ -633,16 +668,23 @@ def lateral_acceleration(realization, step):
     lateral_acceleration = ego_acceleration.dot(ego_orientation_vector)
     return abs(lateral_acceleration.norm())
 
+f22 = rule_function(lateral_acceleration, max)
+
 def lane_centering(realization, step): # lane centering
     ego = realization.ego
     ego_state = ego.get_state(step)
     ego_pos = ego_state.position
-    centerline = ego_state.lane.centerline.lineString
+    ego_lane = ego_state.lane
+    if ego_lane is None:
+        return 0
+    centerline = ego_lane.centerline.lineString
     # double check shapely distance function for sparse centerline
     ego_pos_point = shapely.Point(ego_pos.x, ego_pos.y)
     distance = centerline.distance(ego_pos_point)
     return distance
 
+
+f18 = rule_function(lane_centering, sum)
 # TODO: vehicle yielding rule10, parked vehicle rule 14, turn signal rule 16
 # TODO: lane keeping rule 17, following distance rule 19
 
@@ -657,6 +699,8 @@ def project_point_to_linestring(ls: shapely.LineString, point: shapely.Point):
     return x, y, projected_point
 
 def project_polygon_to_linestring(ls: shapely.LineString, polygon: shapely.Polygon):
+    #print(ls)
+    #print(polygon.centroid)
     x = ls.project(polygon.centroid)
     projected_point = ls.interpolate(x)
     y = ls.distance(polygon)
@@ -717,16 +761,18 @@ def get_front_vehicle(ego_state, candidate_object_states, ls, margin):
         obj_polygon = obj_state.polygon
         x, y, projected_point = project_polygon_to_linestring(ls, obj_polygon)
         
-        if y < (ego_state.obj.dimensions[0]/2 + margin) and x < min_distance:
+        if y < (ego_state.object.dimensions[0]/2 + margin) and x < min_distance:
             min_distance = x
             front_state = obj_state
     
     return front_state
         
 def trajectory_clearance_rule(realization, step, **kwargs):
-    side = kwargs.get("side", "left")
-    margin = kwargs.get("margin", 1)
-    threshold = kwargs.get("threshold", 5)
+    side = kwargs.get("side", "front")
+    margin = kwargs.get("margin", 0.5)
+    threshold = kwargs.get("threshold", 2)
+    if step == len(realization) - 1:
+        return 0
     world_state = realization.get_world_state(step)
     ego_state = world_state.ego_state
     other_vehicle_states = world_state.other_vehicle_states
@@ -735,11 +781,11 @@ def trajectory_clearance_rule(realization, step, **kwargs):
     if len(candidate_object_states) == 0:
         return 0
     
-    ls = trajectory_to_lineString(ego_state.object.trajectory, step)
+    ls = trajectory_to_lineString(ego_state.object.trajectory[step:])
     if side == "front":
         return trajectory_front_clearance(ego_state, candidate_object_states, ls, threshold, margin)
     elif side in ["left", "right"]:
-        return trajectory_side_clearance(ego_state, candidate_object_states, ls, **kwargs)
+        return trajectory_side_clearance(ego_state, candidate_object_states, ls, side, threshold, margin)
     else:
         raise ValueError(f"Invalid side: {side}. Must be 'front', 'left' or 'right'.")
 
@@ -749,6 +795,11 @@ def trajectory_front_clearance(ego_state, candidate_object_states, ls, threshold
         return 0
     violation = max(0, threshold - polygon_distance(ego_state, front_vehicle_state))
     return violation
+
+def front_clearance_trajectory(realization, step, **kwargs):
+    return trajectory_clearance_rule(realization, step, side="front", **kwargs)
+
+f11_b = rule_function(front_clearance_trajectory, max)
 
 def get_side_vehicles(ego_state, candidate_object_states, ls, side, margin):
     orientation = ego_state.orientation.yaw
@@ -760,7 +811,7 @@ def get_side_vehicles(ego_state, candidate_object_states, ls, side, margin):
         angle = orientation_vector.angleWith(obj_vector)
         x, y, projected_point = project_polygon_to_linestring(ls, obj_state.polygon)
         
-        if y < (ego_state.obj.dimensions[0]/2 + margin):
+        if y < (ego_state.object.dimensions[0]/2 + margin):
             continue
 
         if math.pi >= angle >= 0 and side == "left":
@@ -782,6 +833,16 @@ def trajectory_side_clearance(ego_state, candidate_object_states, ls, side, thre
         
     return violation
 
+def left_clearance_trajectory(realization, step, **kwargs):
+    return trajectory_clearance_rule(realization, step, side="left", **kwargs)
+    
+def right_clearance_trajectory(realization, step, **kwargs):
+    return trajectory_clearance_rule(realization, step, side="right", **kwargs)
+
+f12_b = rule_function(left_clearance_trajectory, max)
+
+f13_b = rule_function(right_clearance_trajectory, max)
+
 def buffer_get_front_vehicle(candidate_object_states, front_ls):
 
     front_state = None
@@ -797,7 +858,7 @@ def buffer_get_front_vehicle(candidate_object_states, front_ls):
     return front_state
 
 def buffer_front_clearance(ego_state, candidate_object_states, front_ls, threshold):
-    front_state = buffer_get_front_vehicle(ego_state, candidate_object_states, front_ls)
+    front_state = buffer_get_front_vehicle(candidate_object_states, front_ls)
     
     if front_state is None:
         return 0
@@ -812,8 +873,8 @@ def buffer_side_clearance(ego_state, candidate_object_states, side, margin, thre
         side_buffer_size *= -1
         
     ego_ls = trajectory_to_lineString(ego_state.object.trajectory)
-    traj_buffer_polygon = ego_ls.buffer(buffer_size, cap_style=shapely.CAP_STYLE.flat)
-    side_buffer_polygon = ego_ls.buffer(side_buffer_size, cap_style=shapely.CAP_STYLE.flat, single_sided=True)
+    traj_buffer_polygon = ego_ls.buffer(buffer_size, cap_style='flat')
+    side_buffer_polygon = ego_ls.buffer(side_buffer_size, cap_style='flat', single_sided=True)
     side_buffer_polygon = side_buffer_polygon.difference(traj_buffer_polygon)
 
     violation = 0
@@ -827,18 +888,21 @@ def buffer_clearance_rule(realization, step, **kwargs):
     world_state = realization.get_world_state(step)
     ego_state = world_state.ego_state
     ego_width = ego_state.object.dimensions[0]
-    threshold = kwargs.get("threshold", 5)
+    if step == len(realization) - 1:
+        return 0
+    threshold = kwargs.get("threshold", 2)
     other_vehicle_states = world_state.other_vehicle_states
     proximity = kwargs.get("proximity", 10)
     side = kwargs.get("side", "front")
-    margin = kwargs.get("margin", 1)
+    margin = kwargs.get("margin", 0.5)
     candidate_object_states = proximity_filter(other_vehicle_states, ego_state, proximity)
     if len(candidate_object_states) == 0:
         return 0
     
     front_trajectory = ego_state.object.trajectory[step:]
+    #print(front_trajectory)
     front_ls = trajectory_to_lineString(front_trajectory)
-    front_buffer_polygon = front_ls.buffer(ego_width/2 + margin, cap_style=shapely.CAP_STYLE.flat)
+    front_buffer_polygon = front_ls.buffer(ego_width/2 + margin, cap_style='flat')
     
     front_vehicles = []
     side_vehicles = []
@@ -850,7 +914,7 @@ def buffer_clearance_rule(realization, step, **kwargs):
             side_vehicles.append(obj_state)
     
     if side == "front":
-        return buffer_front_clearance(ego_state, front_vehicles, front_buffer_polygon, threshold)
+        return buffer_front_clearance(ego_state, front_vehicles, front_ls, threshold)
     
     elif side in ["left", "right"]:
         return buffer_side_clearance(ego_state, side_vehicles, side, margin, threshold, proximity)
@@ -858,3 +922,17 @@ def buffer_clearance_rule(realization, step, **kwargs):
     else:
         raise ValueError(f"Invalid side: {side}. Must be 'front', 'left' or 'right'.")
             
+def front_clearance_buffer(realization, step, **kwargs):
+    return buffer_clearance_rule(realization, step, side="front", **kwargs)
+
+f11_a = rule_function(front_clearance_buffer, max)
+
+def left_clearance_buffer(realization, step, **kwargs):
+    return buffer_clearance_rule(realization, step, side="left", **kwargs)
+
+f12_a = rule_function(left_clearance_buffer, max)
+
+def right_clearance_buffer(realization, step, **kwargs):
+    return buffer_clearance_rule(realization, step, side="right", **kwargs)
+
+f13_a = rule_function(right_clearance_buffer, max)
