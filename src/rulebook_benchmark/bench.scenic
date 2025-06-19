@@ -7,7 +7,7 @@ monitor bench():
     realization.network = Network.fromFile(globalParameters['map'])
 
     objects = simulation().objects
-    max_steps = realization.max_steps
+    #max_steps = realization.max_steps
     objs = []
     for obj in objects:
         objs.append(RealizationObject(obj.shape.mesh.copy(), obj.occupiedSpace.dimensions, type(obj).__name__))

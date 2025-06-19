@@ -9,6 +9,9 @@ class Realization():
         self.ego_index = ego_index
         self.delta = delta
 
+    def __len__(self):
+        return len(self.objects[self.ego_index].trajectory)
+
     @property
     def ego(self):
         if not isinstance(self.ego_index, int):
@@ -26,7 +29,7 @@ class Realization():
     def get_world_state(self, step):
         states = []
         for i in range(len(self.objects)):
-            states.append(self.get_object_state(i, step))
+            states.append(self.objects[i].get_state(step))
         return WorldState(states, step, self.ego_index)
 
     def set_ego_index(self, ego_index):

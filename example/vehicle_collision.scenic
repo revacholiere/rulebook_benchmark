@@ -1,4 +1,4 @@
-param map = localPath('../maps/Town01.xodr')
+param map = localPath('../maps/Town05.xodr')
 model scenic.domains.driving.model
 
 
@@ -13,8 +13,9 @@ behavior do_nothing():
         wait
 
  
-ego = new Car with behavior FollowLaneBehavior()
-adv = new Car with behavior FollowLaneBehavior(), left of ego by 2
+ego = new Car with behavior simple()
+adv = new Car with behavior FollowLaneBehavior(), right of ego by 1
+adv2 = new Car ahead of ego by 20, with behavior FollowLaneBehavior()
 
 
 
