@@ -24,7 +24,7 @@ def firstPass(obj, lanes):  # process the states where the lane is not ambiguous
         else:  # needs second pass
             ambiguous_lanes[i] = possible_lanes[i]
 
-    print(len(ambiguous_lanes), "states with ambiguous lanes")
+    #print(len(ambiguous_lanes), "states with ambiguous lanes")
     return ambiguous_lanes
 
 
@@ -94,8 +94,9 @@ def secondPass(obj, ambiguous_lanes, network):
                     found = True
                     continue
                 else:
-                    for lane in candidate_lanes_2:
-                        print(lane.id)
+                    pass
+                    #for lane in candidate_lanes_2:
+                    #    print(lane.id)
 
             angles = []
 
