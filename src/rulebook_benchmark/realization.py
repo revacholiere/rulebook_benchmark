@@ -44,7 +44,7 @@ class Realization():
     @property
     def trajectory(self):
         trajectory = []
-        for i in range(self.max_steps):
+        for i in range(len(self)):
             states = self.get_world_state(i)
             trajectory.append(states)
         return trajectory
@@ -89,8 +89,11 @@ class RealizationObject():
             raise Exception(f"Error: Step {step} not found in object trajectory")
         
     def get_polygon(self, state):
-        return MeshVolumeRegion(mesh=self.mesh, position=state.position, rotation=state.orientation, dimensions=self.dimensions).boundingPolygon.polygons
-        
+        polygon = MeshVolumeRegion(mesh=self.mesh, position=state.position, rotation=state.orientation, dimensions=self.dimensions).boundingPolygon.polygons
+        buffered_polygon = polygon.buffer(0.02)
+        return buffered_polygon
+
+    
 
 
 class State():
