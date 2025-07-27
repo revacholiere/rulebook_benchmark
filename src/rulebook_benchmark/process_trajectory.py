@@ -161,3 +161,12 @@ def process_trajectory_old(realization):
             state.lane = network.laneAt(state.position)
             #if state.lane is None:
             #    print(f"Object {obj.object_type} {obj.mesh} is out of road at step {i}")
+            
+            
+            
+            
+            
+            
+            
+            
+

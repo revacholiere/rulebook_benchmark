@@ -593,8 +593,14 @@ def road_correct_side(realization, start_index=None, end_index=None):
     return violation_score, violation_history
 '''
 def speed_limit(realization, step, threshold=15): # speed limit
-    ego_velocity = realization.get_ego().get_state(step).velocity.norm()
-    return max(0, ego_velocity - threshold)**2
+    ego_state = realization.get_ego().get_state(step)
+    ego_velocity = ego_state.velocity.norm()
+    if ego_state.lane is None or ego_state.lane.speedLimit is None:
+        speed_limit = threshold
+    else:
+        speed_limit = ego_state.lane.speedLimit
+    
+    return max(0, ego_velocity - speed_limit)**2
 
 f15 = rule_function(speed_limit, max)
 
@@ -707,8 +713,8 @@ def project_polygon_to_linestring(ls: shapely.LineString, polygon: shapely.Polyg
     return x, y, projected_point   
 
 def polygon_distance(x_state, y_state):
-    x_polygon = x_state.object.get_polygon(x_state)
-    y_polygon = y_state.object.get_polygon(y_state)
+    x_polygon = x_state.polygon
+    y_polygon = y_state.polygon
     return shapely.distance(x_polygon, y_polygon)
 
 def next_lane(state): # find the next lane in the object's trajectory
@@ -888,7 +894,7 @@ def buffer_clearance_rule(realization, step, **kwargs):
     world_state = realization.get_world_state(step)
     ego_state = world_state.ego_state
     ego_width = ego_state.object.dimensions[0]
-    if step == len(realization) - 1:
+    if step == len(realization) - 1 or step == 0:
         return 0
     threshold = kwargs.get("threshold", 2)
     other_vehicle_states = world_state.other_vehicle_states
@@ -900,9 +906,12 @@ def buffer_clearance_rule(realization, step, **kwargs):
         return 0
     
     front_trajectory = ego_state.object.trajectory[step:]
+    behind_trajectory = ego_state.object.trajectory[:step+1]
     #print(front_trajectory)
     front_ls = trajectory_to_lineString(front_trajectory)
     front_buffer_polygon = front_ls.buffer(ego_width/2 + margin, cap_style='flat')
+    behind_ls = trajectory_to_lineString(behind_trajectory)
+    behind_buffer_polygon = behind_ls.buffer(ego_width/2 + margin, cap_style='flat')
     
     front_vehicles = []
     side_vehicles = []
@@ -910,6 +919,8 @@ def buffer_clearance_rule(realization, step, **kwargs):
     for obj_state in candidate_object_states: # decide which side the vehicle is on
         if front_buffer_polygon.intersects(obj_state.polygon):
             front_vehicles.append(obj_state)
+        elif behind_buffer_polygon.intersects(obj_state.polygon):
+            continue
         else:
             side_vehicles.append(obj_state)
     
