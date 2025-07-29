@@ -97,12 +97,15 @@ class RealizationObject():
 
 
 class State():
-    def __init__(self, obj, position, velocity, orientation, step):
+    def __init__(self, obj, position, velocity, orientation, step, steer=None, throttle=None, brake=None):
         self.object = obj
         self.position = position
         self.velocity = velocity
         self.orientation = orientation
         self.step = step
+        self.steer = steer
+        self.throttle = throttle
+        self.brake = brake
         self.lane = None # to be set in process_trajectory
         
     @property

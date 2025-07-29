@@ -32,7 +32,7 @@ U_main_lane_boundaries = {0: (60, 7, -1), 1: (7, 27, -1), 2: (27, 30, -1), 3: (1
 j = 72
 for i in range(U_main_boundary_max + 1, U_connecting_boundary_max + 1, 2):
     U_main_lane_boundaries[j] = (i+1, i, -1)
-
+    j += 1
     
 
 
