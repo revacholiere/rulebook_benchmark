@@ -214,9 +214,13 @@ def collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_
         if step > 0:
             if shapely.intersects(ego.get_state(step - 1).polygon, obj.get_state(step - 1).polygon):
                 continue
-        
-        ego_before = ego.get_state(step-1) # state before collision
-        obj_before = obj.get_state(step-1)
+            
+        if step == 0:
+            ego_before = ego.get_state(step)
+            obj_before = obj.get_state(step)
+        else:
+            ego_before = ego.get_state(step-1) # state before collision
+            obj_before = obj.get_state(step-1)
         
         kinetic_energy_before = 0.5 * mass * (ego_before.velocity.norm()) + 0.5 * mass * (obj_before.velocity.norm())
         
