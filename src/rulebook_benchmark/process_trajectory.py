@@ -60,6 +60,8 @@ def secondPass(obj, ambiguous_lanes, network):
                 for lane in lanes:
                     end_lane = lane.successor
                     if end_lane == future_lane:
+                        found = True
+                        obj.trajectory[step].lane = lane
                         candidate_lanes.append(lane)
                     elif end_lane.group == future_lane.group:
                         candidate_lanes.append(lane)
@@ -67,6 +69,8 @@ def secondPass(obj, ambiguous_lanes, network):
                 if len(candidate_lanes) == 1:
                     obj.trajectory[step].lane = candidate_lanes.pop()
                     found = True
+                    continue
+                elif found == True:
                     continue
 
             k = step - 1
