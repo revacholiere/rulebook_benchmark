@@ -1,3 +1,65 @@
+# With Scenic
+def f1(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][0]
+
+def f2(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][1]
+
+def f3(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][2]
+
+def f4(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][3]
+
+def f5(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][4]
+
+def f6(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][5]
+
+def f7(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][6]
+
+def f8(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][7]
+
+def f9(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][8]
+
+def f11_a(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][9]
+
+def f12_a(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][10]
+
+def f13_a(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][11]
+
+def f15(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][12]
+
+def f17(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][13]
+
+def f18(traj: tuple, start_index, end_index):
+    name, results = traj
+    return results[name][14]
+
+# Hand-coded rule functions
 def rule_ped_collision(traj: tuple, start_index, end_index):
     name, results = traj
     return results[name][0]
