@@ -24,6 +24,7 @@ U_group_in_roads = 2
     
     
 U_main_max = 71
+#83
 U_main_boundary_max = 83
 U_connecting_boundary_max = 307
 U_max = 499
