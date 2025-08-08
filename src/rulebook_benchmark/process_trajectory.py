@@ -1,5 +1,5 @@
 import shapely
-
+import numpy as np
 
 def isObjectInLane(state, lane):  # check if the object's center is in the lane
     lane_polygon = lane.polygon
@@ -131,8 +131,14 @@ def secondPass(obj, ambiguous_lanes, network):
                 angles = []
                 for lane in lanes:
                     lane_orientation = lane.orientation.value(obj.get_state(step).position)
+                    obj_orientation = obj.get_state(step).orientation.yaw
+                    # ensure both angles are in the range [0, 2*pi)
+                    lane_orientation = lane_orientation % (2 * np.pi)
+                    obj_orientation = obj_orientation % (2 * np.pi)
+                    
+                    
                     angles.append(
-                        abs(lane_orientation - obj.get_state(step).orientation.yaw)
+                        abs(lane_orientation - obj_orientation)
                     )
                 min_idx = angles.index(min(angles))
                 obj.trajectory[step].lane = lanes[min_idx]
