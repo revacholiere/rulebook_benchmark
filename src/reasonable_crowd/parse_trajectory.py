@@ -14,9 +14,10 @@ def interpolate_between_values(start, end, delta, progress):
 
 
 class ReasonableCrowdObject:
-    def __init__(self, dimensions, object_type):
+    def __init__(self, dimensions, object_type, object_id):
         self.dimensions = dimensions
         self.trajectory = []
+        self.object_id = object_id
         if object_type == "ego" or object_type == "vehicle":
             self.object_type = "Car"
         elif object_type == "pedestrian":
@@ -138,7 +139,8 @@ class ReasonableCrowdTrajectoryParser:
             length = base_polygon.bounds[2] - base_polygon.bounds[0]
             dimensions = (width, length)
             object_type = trajectory[0]['type']
-            obj = ReasonableCrowdObject(dimensions, object_type)
+            obj_id = trajectory[0]['id']
+            obj = ReasonableCrowdObject(dimensions, object_type, obj_id)
             for state in trajectory:
                 position = Vector(state['x_meters'], state['y_meters'])
                 velocity = Vector(state['x_velocity_meters_per_second'], state['y_velocity_meters_per_second'])
