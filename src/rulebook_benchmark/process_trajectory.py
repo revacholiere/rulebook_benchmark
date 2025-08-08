@@ -111,13 +111,19 @@ def secondPass(obj, ambiguous_lanes, network):
             else:
                 last_resort = lanes
 
+            obj_orientation = obj.get_state(step).orientation.yaw
+            obj_orientation = obj_orientation % (2 * np.pi)
             for lane in last_resort:  # workaround for when no candidate lanes are found
                 lane_orientation = lane.orientation.value(obj.get_state(step).position)
+                lane_orientation = lane_orientation % (2 * np.pi)
                 angles.append(
-                    abs(lane_orientation - obj.get_state(step).orientation.yaw)
+                    abs(lane_orientation - obj_orientation)
                 )
             min_idx = angles.index(min(angles))
             obj.trajectory[step].lane = lanes[min_idx]
+            print(obj.object_id, "found lane with closest orientation", step)
+                
+            
         else:
             prev_lane = obj.get_state(step - 1).lane if step > 0 else None
             if prev_lane is not None:

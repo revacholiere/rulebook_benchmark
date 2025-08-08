@@ -289,7 +289,7 @@ def vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04):
 
 f4 = rule_function(vru_time_to_collision, max)
 
-def vehicle_time_to_collision(realization, step, threshold=1.0, step_size=0.05):
+def vehicle_time_to_collision(realization, step, threshold=3.0, step_size=0.05):
     
     def check_intersection(ego_polygon, adv_polygon, ego_velocity, adv_velocity, step_size=step_size, threshold_time=threshold):
         ego_vx, ego_vy = ego_velocity # this may get "too many values to unpack" error, see test.ipynb code blocks 3, 4, 5
