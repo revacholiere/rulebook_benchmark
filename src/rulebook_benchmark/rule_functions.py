@@ -114,8 +114,7 @@ def rule_vru_collision(realization, start_index=None, end_index=None):
     return max(rule_collision(realization, "Pedestrian", start_index=start_index, end_index=end_index), rule_collision(realization, "Bicycle", start_index=start_index, end_index=end_index))
 """
 
-def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70): # looks good, but the normalization can be done with Scenic's built-in functions? also, maybe the timestep right before collision could be a starting point?
-    # also, we could unify the VRU and vehicle rules and add a parameter?
+def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70, momentum = False):
     ego = realization.ego
     ego_state = ego.get_state(step)
     ego_polygon = ego_state.polygon
@@ -145,14 +144,19 @@ def rule_vru_collision(realization, step, car_mass=1500, vru_mass=70): # looks g
             # Collision ends at the i-th step
             ego_after_velocity = (next_ego_state.velocity[0], next_ego_state.velocity[1])
             obj_after_velocity = (next_obj_state.velocity[0], next_obj_state.velocity[1])
-            current_violation = 0.5 * car_mass * (np.linalg.norm(ego_velocity) ** 2 - np.linalg.norm(ego_after_velocity) ** 2) + \
+            
+            if momentum:
+                current_violation = car_mass * (np.linalg.norm(ego_velocity) - np.linalg.norm(ego_after_velocity)) + \
+                                    vru_mass * (np.linalg.norm(obj_velocity) - np.linalg.norm(obj_after_velocity))
+            else:
+                current_violation = 0.5 * car_mass * (np.linalg.norm(ego_velocity) ** 2 - np.linalg.norm(ego_after_velocity) ** 2) + \
                                 0.5 * vru_mass * (np.linalg.norm(obj_after_velocity) ** 2 - np.linalg.norm(obj_velocity) ** 2)
             violation = max(violation, current_violation)
             break
     
     return violation
 
-def rule_vehicle_collision(realization, step, car_mass=1500):
+def rule_vehicle_collision(realization, step, car_mass=1500, momentum = False):
     ego = realization.ego
     ego_state = ego.get_state(step)
     ego_polygon = ego_state.polygon
@@ -182,14 +186,19 @@ def rule_vehicle_collision(realization, step, car_mass=1500):
             # Collision ends at the i-th step
             ego_after_velocity = (next_ego_state.velocity[0], next_ego_state.velocity[1])
             obj_after_velocity = (next_obj_state.velocity[0], next_obj_state.velocity[1])
-            current_violation = 0.5 * car_mass * (np.linalg.norm(ego_velocity) ** 2 - np.linalg.norm(ego_after_velocity) ** 2) + \
-                                0.5 * car_mass * (np.linalg.norm(obj_velocity) ** 2 - np.linalg.norm(obj_after_velocity) ** 2)
+
+            if momentum:
+                current_violation = car_mass * (np.linalg.norm(ego_velocity) - np.linalg.norm(ego_after_velocity)) + \
+                                    car_mass * (np.linalg.norm(obj_velocity) - np.linalg.norm(obj_after_velocity))
+            else:
+                current_violation = 0.5 * car_mass * (np.linalg.norm(ego_velocity) ** 2 - np.linalg.norm(ego_after_velocity) ** 2) + \
+                                    0.5 * car_mass * (np.linalg.norm(obj_velocity) ** 2 - np.linalg.norm(obj_after_velocity) ** 2)
             violation = max(violation, current_violation)
             break
     
     return violation
 
-def collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_mass=70):
+def collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_mass=70, momentum=False):
     if object_type == "Vehicle":
         mass = car_mass
         objects = realization.VRUs
@@ -222,7 +231,7 @@ def collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_
             ego_before = ego.get_state(step-1) # state before collision
             obj_before = obj.get_state(step-1)
         
-        kinetic_energy_before = 0.5 * mass * (ego_before.velocity.norm()) + 0.5 * mass * (obj_before.velocity.norm())
+        
         
         # Collision starts at this step
         for i in range(step + 1, len(ego.trajectory) - 1):
@@ -236,21 +245,41 @@ def collision_modified(realization, step, object_type="VRU", car_mass=1500, vru_
                 continue
             
             # Collision ends at the i-th step
-            kinetic_energy_after = 0.5 * mass * (next_ego_state.velocity.norm() ** 2) + 0.5 * mass * (next_obj_state.velocity.norm() ** 2)
-            violation = max(violation, kinetic_energy_before - kinetic_energy_after)
+            
+            if momentum:
+                momentum_before = mass * ego_before.velocity + mass * obj_before.velocity
+                momentum_after = mass * next_ego_state.velocity + mass * next_obj_state.velocity
+                current_violation = momentum_before - momentum_after
+            else:
+                kinetic_energy_before = 0.5 * mass * (ego_before.velocity.norm()) + 0.5 * mass * (obj_before.velocity.norm())
+                kinetic_energy_after = 0.5 * mass * (next_ego_state.velocity.norm() ** 2) + 0.5 * mass * (next_obj_state.velocity.norm() ** 2)
+                current_violation = kinetic_energy_before - kinetic_energy_after
+            violation = max(violation, current_violation)
             
     return violation
             
 
 def vru_collision(realization, step, **kwargs):
-    return collision_modified(realization, step, object_type="VRU", **kwargs)    
+    return collision_modified(realization, step, object_type="VRU", **kwargs)
+
+def vru_collision_momentum(realization, step, **kwargs):
+    return collision_modified(realization, step, object_type="VRU", momentum=True, **kwargs)
+
+
 
 f1 = rule_function(rule_vru_collision, max)             
+
+f1_b = rule_function(vru_collision_momentum, max)
 
 def vehicle_collision(realization, step, **kwargs):
     return collision_modified(realization, step, object_type="Vehicle", **kwargs)
 
 f2 = rule_function(rule_vehicle_collision, max)
+
+def vehicle_collision_momentum(realization, step, **kwargs):
+    return collision_modified(realization, step, object_type="Vehicle", momentum=True, **kwargs)
+
+f2_b = rule_function(vehicle_collision_momentum, max)
 
 def vru_time_to_collision(realization, step, threshold=1.0, step_size=0.04):
     
@@ -659,7 +688,7 @@ def longitudinal_acceleration(realization, step):
     ego_prev_velocity = ego_prev_state.velocity
     ego_acceleration = (ego_velocity - ego_prev_velocity) / realization.delta
     longitudinal_acceleration = ego_acceleration.dot(ego_orientation_vector)
-    return longitudinal_acceleration.norm()
+    return abs(longitudinal_acceleration.norm())
 
 
 f21 = rule_function(longitudinal_acceleration, max)
@@ -669,14 +698,10 @@ def lateral_acceleration(realization, step):
         return 0
     ego = realization.ego
     ego_state = ego.get_state(step)
-    ego_orientation = ego_state.orientation.yaw + math.pi/2 # perpendicular to the orientation
-    ego_orientation_vector = Vector(math.cos(ego_orientation), math.sin(ego_orientation), 0).normalized()
     ego_velocity = ego_state.velocity
-    ego_prev_state = ego.get_state(step - 1)
-    ego_prev_velocity = ego_prev_state.velocity
-    ego_acceleration = (ego_velocity - ego_prev_velocity) / realization.delta
-    lateral_acceleration = ego_acceleration.dot(ego_orientation_vector)
-    return abs(lateral_acceleration.norm())
+    turning_radius = ego.length / math.sin(ego.steer * math.pi / 2)
+    lateral_acceleration = ego_velocity.norm() ** 2 / turning_radius if turning_radius != 0 else 0
+    return abs(lateral_acceleration)
 
 f22 = rule_function(lateral_acceleration, max)
 
@@ -914,9 +939,13 @@ def buffer_clearance_rule(realization, step, **kwargs):
     #print(front_trajectory)
     front_ls = trajectory_to_lineString(front_trajectory)
     front_buffer_polygon = front_ls.buffer(ego_width/2 + margin, cap_style='flat')
+    ego_last_state = realization.get_ego().get_state((len(realization) - 1))
+    front_buffer_polygon = front_buffer_polygon.union(ego_last_state.polygon)
     behind_ls = trajectory_to_lineString(behind_trajectory)
+    ego_first_state = realization.get_ego().get_state(0)
     behind_buffer_polygon = behind_ls.buffer(ego_width/2 + margin, cap_style='flat')
-    
+    behind_buffer_polygon = behind_buffer_polygon.union(ego_first_state.polygon)
+
     front_vehicles = []
     side_vehicles = []
     
@@ -951,3 +980,54 @@ def right_clearance_buffer(realization, step, **kwargs):
     return buffer_clearance_rule(realization, step, side="right", **kwargs)
 
 f13_a = rule_function(right_clearance_buffer, max)
+
+
+
+
+
+
+
+def clearance_vector_based(realization, step, **kwargs):
+    front_angle = kwargs.get("front_angle", math.radians(30)) 
+    side = kwargs.get("side", "front")
+    threshold = kwargs.get("threshold", 2)
+    world_state = realization.get_world_state(step)
+    ego_state = world_state.ego_state
+    candidates = proximity_filter(world_state.other_vehicle_states, ego_state, kwargs.get("proximity", 10))
+    if len(candidates) == 0:
+        return 0
+    
+    ego_yaw = ego_state.orientation.yaw
+    ego_heading = Vector(math.cos(ego_yaw), math.sin(ego_yaw), 0).normalized()
+    violation = 0
+    
+    for object_state in world_state.other_vehicle_states:
+        ego_to_object = (object_state.position - ego_state.position).normalized()
+        angle = ego_heading.angleWith(ego_to_object)
+        if abs(angle) <= front_angle/2:
+            object_side = "front"
+        elif angle < 0:
+            object_side = "right"
+        else:
+            object_side = "left"
+
+        if side == object_side:
+            violation = max(violation, threshold - polygon_distance(ego_state, object_state), 0)
+    return violation
+
+
+
+def front_clearance_vector(realization, step, **kwargs):
+    return clearance_vector_based(realization, step, side="front", **kwargs)
+
+f11_c = rule_function(front_clearance_vector, max)
+
+def left_clearance_vector(realization, step, **kwargs):
+    return clearance_vector_based(realization, step, side="left", **kwargs)
+
+f12_c = rule_function(left_clearance_vector, max)
+
+def right_clearance_vector(realization, step, **kwargs):
+    return clearance_vector_based(realization, step, side="right", **kwargs)
+
+f13_c = rule_function(right_clearance_vector, max)
