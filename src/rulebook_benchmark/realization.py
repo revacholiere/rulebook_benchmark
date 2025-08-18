@@ -79,6 +79,9 @@ class RealizationObject():
     def __init__(self, mesh, dimensions, object_type):
         self.mesh = mesh
         self.dimensions = dimensions
+        self.length = dimensions[1]
+        self.width = dimensions[0]
+
         self.object_type = object_type
         self.trajectory = []
 
