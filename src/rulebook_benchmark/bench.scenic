@@ -1,6 +1,7 @@
 from scenic.domains.driving.roads import Network
 model scenic.domains.driving.model
 from rulebook_benchmark.realization import Realization, RealizationObject, State
+import numpy as np
 
 monitor bench():
     realization = globalParameters['realization']
@@ -9,8 +10,12 @@ monitor bench():
     objects = simulation().objects
     #max_steps = realization.max_steps
     objs = []
-    for obj in objects:
-        objs.append(RealizationObject(obj.shape.mesh.copy(), obj.occupiedSpace.dimensions, type(obj).__name__))
+    objs.append(RealizationObject(0 , objects[0].occupiedSpace.dimensions, type(objects[0]).__name__))  # ego
+
+    ids = 1
+    for obj in objects[1:]:
+        objs.append(RealizationObject(ids, obj.occupiedSpace.dimensions, type(obj).__name__))
+        ids += 1
     realization.objects = objs
 
     step = 0
@@ -20,7 +25,7 @@ monitor bench():
         for i in range(len(objects)):
             obj = realization.objects[i]
             object = objects[i]
-            obj.trajectory.append(State(obj, object.position, object.velocity, object.orientation, step, object.steer, object.throttle, object.brake))
+            obj.trajectory.append(State(obj, np.array([object.position.x, object.position.y]), np.array([object.velocity.x, object.velocity.y]), object.orientation, step, object.steer, object.throttle, object.brake))
         step += 1
         wait
 

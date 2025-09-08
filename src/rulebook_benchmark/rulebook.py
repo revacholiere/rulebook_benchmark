@@ -1,4 +1,3 @@
-from rulebook_benchmark.rule_functions import *
 from enum import Enum
 from collections import defaultdict
 import networkx as nx

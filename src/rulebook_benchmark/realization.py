@@ -1,9 +1,16 @@
 # TODO: change naming of class methods
 from cached_property import cached_property
 from scenic.core.regions import MeshVolumeRegion
+from scenic.core.vectors import Vector
+import numpy as np
+import shapely
+from rulebook_benchmark.utils import polygon_distance, in_proximity, intersects
+
+
+DELTA = 0.1
 
 class Realization():
-    def __init__(self, ego_index=0, delta=0.1):
+    def __init__(self, ego_index=0, delta=DELTA):
         self.network = None
         self.objects = None
         self.ego_index = ego_index
@@ -50,7 +57,7 @@ class Realization():
         return trajectory
 
     @property
-    def objects_non_ego(self):
+    def other_objects(self):
         return self.objects[:self.ego_index] + self.objects[self.ego_index + 1:]
     
     @cached_property
@@ -62,11 +69,11 @@ class Realization():
         return vehicles
     
     @property
-    def vehicles_non_ego(self):
+    def other_vehicles(self):
         return self.vehicles[:self.ego_index] + self.vehicles[self.ego_index + 1:]
     
     @cached_property
-    def VRUs(self):
+    def vrus(self):
         VRUs = []
         for obj in self.objects:
             if obj.object_type == "Pedestrian" or obj.object_type == "Bicycle":
@@ -76,8 +83,8 @@ class Realization():
 
 
 class RealizationObject():
-    def __init__(self, mesh, dimensions, object_type):
-        self.mesh = mesh
+    def __init__(self, object_id, dimensions, object_type):
+        self.uid = object_id
         self.dimensions = dimensions
         self.length = dimensions[1]
         self.width = dimensions[0]
@@ -91,10 +98,7 @@ class RealizationObject():
         except IndexError:
             raise Exception(f"Error: Step {step} not found in object trajectory")
         
-    def get_polygon(self, state):
-        polygon = MeshVolumeRegion(mesh=self.mesh, position=state.position, rotation=state.orientation, dimensions=self.dimensions).boundingPolygon.polygons
-        buffered_polygon = polygon.buffer(0.02)
-        return buffered_polygon
+
 
     
 
@@ -111,12 +115,56 @@ class State():
         self.brake = brake
         self.lane = None # to be set in process_trajectory
         
-    @property
+    @cached_property
     def orientation_trimesh(self):
         return self.orientation._trimeshEulerAngles()
     @cached_property
     def polygon(self):
-        return self.object.get_polygon(self)
+        obj_length = self.object.length
+        obj_width = self.object.width
+        cx, cy = self.position
+        yaw = self.orientation.yaw  # radians
+
+        # Half-dimensions
+        hl = obj_length / 2
+        hw = obj_width / 2
+
+        # Rectangle corners in local frame (centered at origin, no rotation)
+        local_corners = np.array([
+            [ hl,  hw],
+            [ hl, -hw],
+            [-hl, -hw],
+            [-hl,  hw]
+        ])
+
+        # Rotation matrix
+        R = np.array([
+            [np.cos(yaw), -np.sin(yaw)],
+            [np.sin(yaw),  np.cos(yaw)]
+        ])
+
+        # Rotate + translate
+        world_corners = (local_corners @ R.T) + np.array([cx, cy])
+
+        return shapely.Polygon(world_corners)
+    
+    
+    @cached_property
+    def coords_np(self):
+        return np.array(self.polygon.exterior.coords[:-1])
+
+    
+    @cached_property
+    def acceleration(self):
+        if self.step == 0:
+            return np.zeros(2)
+        else:
+            prev_state = self.object.get_state(self.step - 1)
+            delta_v = self.velocity - prev_state.velocity
+            return delta_v / DELTA
+    @property
+    def uid(self):
+        return self.object.uid
     
 
 
@@ -147,6 +195,154 @@ class WorldState():
     @property
     def vru_states(self):
         return [state for state in self.states if state.object.object_type in ["Pedestrian", "Bicycle"]]
+    
+    
+    
+    
+
+
+
+class VariableHandler:
+    def __init__(self, realization):
+        self.realization = realization
+        self._pools = {}
+        self.ego = realization.ego
+        self.objects = realization.objects
+        self.network = realization.network
+        self._collision_timeline = {}
+        self.vehicle_uids = set(obj.uid for obj in self.realization.other_vehicles)
+        self.vru_uids = set(obj.uid for obj in self.realization.vrus)
+
+    def __call__(self, step):
+        if step not in self._pools:
+            self._pools[step] = VariablePool(step, self)
+            
+        self._pools.pop(step - 3, None)  # free memory by removing pools for steps that are no longer needed
+        return self._pools[step]
+
+    @cached_property
+    def trajectory_linestring(self):
+        return shapely.LineString([state.position for state in self.ego.trajectory])
+
+    @cached_property
+    def other_objects(self):
+        return self.realization.other_objects
+    
+    @cached_property
+    def trajectory_buffer(self):
+        width = self.ego.width
+        polygon = shapely.buffer(self.trajectory_linestring, width/2, cap_style='square')
+        polygon = polygon.union(self.ego.trajectory[-1].polygon)
+        polygon = polygon.union(self.ego.trajectory[0].polygon)
+        return polygon
+    
+    @cached_property
+    def collision_timeline(self):
+        self._collision_timeline = {}
+
+        previous_colliding = set()
+        for i in range(len(self.realization)):
+            pool = self(i)
+            colliding = set(pool.vehicles_colliding.keys())
+
+            # new collisions
+            for uid in colliding - previous_colliding:
+                self._collision_timeline.setdefault(uid, []).append([i, i + 1]) if i == 0 else self._collision_timeline.setdefault(uid, []).append([i - 1, i + 1])
+
+            # ongoing collisions
+            for uid in colliding & previous_colliding:
+                self._collision_timeline[uid][-1][1] = i + 1 if i < len(self.realization) - 1 else i
+
+            previous_colliding = colliding
+
+        # convert inner [start, end] lists to tuples
+        for uid, intervals in self._collision_timeline.items():
+            self._collision_timeline[uid] = [tuple(interval) for interval in intervals]
+
+        return self._collision_timeline
+
+
+class VariablePool:
+    def __init__(self, step, handler, proximity_threshold=3, steps_ahead=50):
+        self.handler = handler
+        self.realization = self.handler.realization
+        self.other_objects = self.handler.other_objects
+        self.objects = self.handler.objects
+        self.step = step
+        self.world_state = self.realization.get_world_state(step)
+        self.ego = self.realization.ego
+        self.ego_state = self.world_state.ego_state
+        self.other_vehicle_states = self.world_state.other_vehicle_states
+        self.vru_states = self.world_state.vru_states
+        self.proximity_threshold = proximity_threshold
+        self._distances = {}
+        self.steps_ahead = steps_ahead
+        
+    @cached_property
+    def ego_state(self):
+        return self.ego.get_state(self.step)
+    
+    def colliding(self, states):
+        colliding = {}
+        for state in states:
+            if intersects(self.ego_state, state):
+                colliding[state.uid] = state
+        return colliding
+
+    def distance(self, other_state):
+        uid = other_state.uid
+        if uid not in self._distances:
+            self._distances[uid] = polygon_distance(self.ego_state, other_state)
+        return self._distances[uid]
+    
+    @cached_property
+    def vehicles_colliding(self):
+        states_in_proximity = self.vehicles_in_proximity
+        return self.colliding(states_in_proximity)
+
+    @cached_property
+    def vrus_colliding(self):
+        states_in_proximity = self.vrus_in_proximity
+        return self.colliding(states_in_proximity)
+
+    @cached_property
+    def vehicles_in_proximity(self):
+        return in_proximity(self.ego_state, self.other_vehicle_states, self.proximity_threshold)
+    @cached_property
+    def vrus_in_proximity(self):
+        return in_proximity(self.ego_state, self.vru_states, self.proximity_threshold)
+
+    @cached_property
+    def trajectory_linestring(self):
+        return self.handler.trajectory_linestring
+    
+    @cached_property
+    def trajectory_buffer(self):
+        return self.handler.trajectory_buffer
+
+    @cached_property
+    def trajectory_front_buffer(self):
+        width = self.ego.width
+        polygon = shapely.buffer(self.trajectory_front_linestring, width/2, cap_style='square')
+        return polygon
+
+    @cached_property
+    def trajectory_behind_buffer(self):
+        width = self.ego.width
+        polygon = shapely.buffer(self.trajectory_behind_linestring, width/2, cap_style='square')
+        return polygon
+
+    @cached_property
+    def trajectory_front_linestring(self):
+
+        return shapely.LineString([state.position for state in self.ego.trajectory[self.step: self.step + self.steps_ahead]])
+
+    @cached_property
+    def trajectory_behind_linestring(self):
+        return shapely.LineString([state.position for state in self.ego.trajectory[self.step - self.steps_ahead:self.step]])
+
+        
+        
     
     
 

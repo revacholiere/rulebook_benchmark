@@ -10,6 +10,7 @@ from reasonable_crowd.parse_map import parse_map
 from rulebook_benchmark.process_trajectory import process_trajectory
 from rulebook_benchmark.rulebook import Rulebook
 from rulebook_benchmark.rulebook import Relation
+from tqdm import tqdm
 
 path_to_reasonable_crowd = "../../../Reasonable-Crowd"
 map_directory = path_to_reasonable_crowd + '/maps'
@@ -30,14 +31,14 @@ def get_rule_violations(realization):
     results['vehicle_collision'] = f2(realization)
     results['drivable_area'] = f3(realization)
     results['vru_ttc'] = f4(realization)
-    results['vru_acknowledgement'] = f5(realization)
+    results['vru_acknowledgement'] = f5(realization, proximity = 4, threshold = -1, steps = 30)
     results['vehicle_ttc'] = f6(realization)
     results['correct_side'] = f7(realization)
-    results['vru_offroad'] = f8(realization)
-    results['vru_onroad'] = f9(realization)
-    results['front_clearance_buffer'] = f11_a(realization)
-    results['left_clearance_buffer'] = f12_a(realization)
-    results['right_clearance_buffer'] = f13_a(realization)
+    results['vru_offroad'] = f8(realization, threshold = 2)
+    results['vru_onroad'] = f9(realization, threshold = 2)
+    results['front_clearance_buffer'] = f11_a(realization, proximity = 5, threshold = 1)
+    results['left_clearance_buffer'] = f12_a(realization, proximity = 5, threshold = 0.5)
+    results['right_clearance_buffer'] = f13_a(realization, proximity = 5, threshold = 0.5)
     results['speed_limit'] = f15(realization)
     results['lane_keeping'] = f17(realization)
     results['lane_centering'] = f18(realization)
@@ -45,22 +46,26 @@ def get_rule_violations(realization):
     return results
 
 count = 0
-for filename in os.listdir(trajectory_directory):
-    if not filename.endswith('.json'):
-        continue
+trajectory_files = [f for f in os.listdir(trajectory_directory) if f.endswith('.json')]
+pbar = tqdm(total=len(trajectory_files), leave=False)
+for filename in trajectory_files:
     traj_path = os.path.join(trajectory_directory, filename)
     if filename.startswith('U'):
-        print(f"Evaluating trajectory {filename} on map U")
+        #print(f"Evaluating trajectory {filename} on map U")
+        pbar.set_description(f"Evaluating trajectory {filename} on map U")
         realization = parse_trajectory(traj_path, step_size=100000)
         realization.network = network_U
     else:
-        print(f"Evaluating trajectory {filename} on map S")
+        #print(f"Evaluating trajectory {filename} on map S")
+        pbar.set_description(f"Evaluating trajectory {filename} on map S")
         realization = parse_trajectory(traj_path, step_size=100000)
         realization.network = network_S
+    process_trajectory(realization)
     results = get_rule_violations(realization)
     f.write(f"{filename}")
     for _, result in results.items():
         f.write(f" {result.total_violation}")
+    pbar.update(1)
     f.write("\n")
 
 f.close()

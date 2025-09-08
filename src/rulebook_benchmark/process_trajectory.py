@@ -1,21 +1,20 @@
 import shapely
 import numpy as np
+from shapely.strtree import STRtree
+from rulebook_benchmark.utils import angle_between
 
 def isObjectInLane(state, lane):  # check if the object's center is in the lane
     lane_polygon = lane.polygon
-    object_point = shapely.Point(state.position.x, state.position.y)
+    object_point = shapely.Point(state.position)
     return lane_polygon.contains(object_point)
 
 
-def firstPass(obj, lanes):  # process the states where the lane is not ambiguous
+def firstPass(obj, str_tree, lanes):  # process the states where the lane is not ambiguous
     possible_lanes = {}
     ambiguous_lanes = {}
     for i in range(len(obj.trajectory)):
         state = obj.get_state(i)
-        possible_lanes[i] = []
-        for lane in lanes:
-            if isObjectInLane(state, lane):
-                possible_lanes[i].append(lane)
+        possible_lanes[i] = get_possible_lanes(state, str_tree, lanes)
 
         if len(possible_lanes[i]) == 1:
             obj.trajectory[i].lane = possible_lanes[i][0]
@@ -121,7 +120,7 @@ def secondPass(obj, ambiguous_lanes, network):
                 )
             min_idx = angles.index(min(angles))
             obj.trajectory[step].lane = lanes[min_idx]
-            print(obj.object_id, "found lane with closest orientation", step)
+            #print(obj.object_id, "found lane with closest orientation", step)
                 
             
         else:
@@ -156,22 +155,31 @@ def process_trajectory(
     realization,
 ):  # given a realization, extract the sequence of lanes followed by each vehicle
     network = realization.network
-    objects = realization.vehicles
+    objects = realization.objects
 
     lanes = network.lanes
+    lane_polygons = [lane.polygon for lane in lanes]
+    strtree = STRtree(lane_polygons)
+    polygon_to_lane = dict(zip(lane_polygons, lanes))
 
     for obj in objects:
-        ambiguous_lanes = firstPass(obj, lanes)
+        ambiguous_lanes = firstPass(obj, strtree, lanes)
         if len(ambiguous_lanes) > 0:
             secondPass(obj, ambiguous_lanes, network)
 
         # print(f"Object {obj.object_type} {obj.mesh} has trajectory: {[state.lane for state in obj.trajectory]}")
 
 
+
+def get_possible_lanes(state, tree, lanes):
+    point = shapely.Point(state.position)
+    indices = tree.query(point, predicate="intersects")
+    return [lanes[ind] for ind in indices]
+
+
 def process_trajectory_old(realization):
     network = realization.network
-    
-    objects = realization.vehicles
+    objects = realization.objects
     for obj in objects:
         for i in range(len(obj.trajectory)):
             state = obj.get_state(i)

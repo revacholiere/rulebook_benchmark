@@ -1,51 +1,30 @@
 import shapely
-import json
+#import json
 import numpy as np
 from scenic.core.vectors import Vector
 from cached_property import cached_property
-from rulebook_benchmark.realization import State, Realization
+from rulebook_benchmark.realization import State, Realization, RealizationObject
 from rulebook_benchmark.roads import OrientationVectorPlaceholder
+import orjson
 # example trajectory data
 
 
-def interpolate_between_values(start, end, delta, progress):
-    unit = (end - start) / delta
-    return start + unit * progress
-
-
-class ReasonableCrowdObject:
-    def __init__(self, dimensions, object_type, object_id):
-        self.dimensions = dimensions
-        self.trajectory = []
-        self.object_id = object_id
+class ReasonableCrowdObject(RealizationObject):
+    def __init__(self, object_id, dimensions, object_type):
+        super().__init__(object_id, dimensions, object_type)
         if object_type == "ego" or object_type == "vehicle":
             self.object_type = "Car"
         elif object_type == "pedestrian":
             self.object_type = "Pedestrian"
         else:
             raise ValueError(f"Unknown object type: {object_type}")
-    def get_state(self, step):
-        try:
-            return self.trajectory[step]
-        except IndexError:
-            raise Exception(f"Error: Step {step} out of bounds for object trajectory with length {len(self.trajectory)}")
-        
 
-class ReasonableCrowdState(State):
-    def __init__(self, obj, position, velocity, orientation, step, footprint):
-        super().__init__(obj, position, velocity, orientation, step)
-        self.footprint = footprint
-        self.polygon = None
-
-    #@cached_property
-    #def polygon(self):
-        #return shapely.Polygon(self.footprint)
 
 
 class ReasonableCrowdTrajectoryParser:
-    def __init__(self, path, step_size):
-        self.path = path
-        self.trajectory_data = json.load(open(path, 'r'))
+    def __init__(self, path, step_size=100000):
+        with open(path, "rb") as f:   # must open in binary mode
+            self.trajectory_data = orjson.loads(f.read())
         self.step_size = step_size
 
         self._preprocess_trajectory_data()
@@ -53,107 +32,85 @@ class ReasonableCrowdTrajectoryParser:
     def _preprocess_trajectory_data(self):
         # aggregate each object into a list of states
         self.object_states = {}
-        
+        max_timestamps = {}
+        #print(len(self.trajectory_data))
+
         for state in self.trajectory_data:
             obj_id = state['id']
+            timestamp = state['timestamp']
+            modulus = timestamp % self.step_size
+            if modulus != 0 and modulus != 1 and modulus != -1:
+                continue
             if obj_id not in self.object_states:
                 self.object_states[obj_id] = {}
+                max_timestamps[obj_id] = 0
             self.object_states[obj_id][state['timestamp']] = state
-        
-        max_end_timestamp = max(max(states.keys()) for states in self.object_states.values())
+            max_timestamps[obj_id] = max(max_timestamps[obj_id], state['timestamp'])
 
+        max_end_timestamp = min(max_timestamps.values())
 
-        self.object_trajectories = {}
-
-        for obj, states in self.object_states.items():
-            trajectory = []
-            step = 0
-            start_timestamp = min(states.keys())
-            end_timestamp = max(states.keys())
-            for i in range(0, max_end_timestamp+1, self.step_size):
-
-
-
-                state = states.get(i, None)
-                if state is not None:
-                    pass
-                elif i < start_timestamp:
-                    # just use the first state
-                    state = states[start_timestamp]
-                elif i > end_timestamp:
-                    # just use the last state
-                    state = states[end_timestamp]
-                else:
-                    # interpolate the state
-                    prev_timestamp = i - 1
-                    next_timestamp = i + 1
-                    while states.get(prev_timestamp, None) is None and prev_timestamp > start_timestamp:
-                        prev_timestamp -= 1
-                    while states.get(next_timestamp, None) is None and next_timestamp < end_timestamp:
-                        next_timestamp += 1
-                    prev_state = states[prev_timestamp]
-                    next_state = states[next_timestamp]
-                    x = interpolate_between_values(prev_state['x_meters'], next_state['x_meters'], next_timestamp - prev_timestamp, i - prev_timestamp)
-                    y = interpolate_between_values(prev_state['y_meters'], next_state['y_meters'], next_timestamp - prev_timestamp, i - prev_timestamp)
-                    x_velocity = interpolate_between_values(prev_state['x_velocity_meters_per_second'], next_state['x_velocity_meters_per_second'], next_timestamp - prev_timestamp, i - prev_timestamp)
-                    y_velocity = interpolate_between_values(prev_state['y_velocity_meters_per_second'], next_state['y_velocity_meters_per_second'], next_timestamp - prev_timestamp, i - prev_timestamp)
-                    heading = interpolate_between_values(prev_state['heading_radians'], next_state['heading_radians'], next_timestamp - prev_timestamp, i - prev_timestamp)
-                    footprint = prev_state['footprint']
-                    new_footprint = []
-                    for j in range(len(footprint)):
-                        new_footprint.append([
-                            interpolate_between_values(prev_state['footprint'][j][0], next_state['footprint'][j][0], next_timestamp - prev_timestamp, i - prev_timestamp),
-                            interpolate_between_values(prev_state['footprint'][j][1], next_state['footprint'][j][1], next_timestamp - prev_timestamp, i - prev_timestamp)
-                        ])
-
-                    state = {
-                        'type': prev_state['type'],
-                        'x_meters': x,
-                        'y_meters': y,
-                        'x_velocity_meters_per_second': x_velocity,
-                        'y_velocity_meters_per_second': y_velocity,
-                        'heading_radians': heading,
-                        'timestamp': i,
-                        'id': obj,
-                        'footprint': new_footprint,
-                    }
-                state['step'] = step
-                    
-                step += 1
-                trajectory.append(state)
-            self.object_trajectories[obj] = trajectory
-
-    def create_realization(self):
-        realization = Realization()
-        
         objects = []
-        for obj_id, trajectory in self.object_trajectories.items():
-            footprint = trajectory[0]['footprint']
-            heading = trajectory[0]['heading_radians']
-            previous_x = trajectory[0]['x_meters']
-            previous_y = trajectory[0]['y_meters']
-            
+        for obj, states in self.object_states.items():
+            state_list = list(states.values())
+            footprint = state_list[0]['footprint']
+            heading = state_list[0]['heading_radians']
             polygon = shapely.Polygon(footprint)
             base_polygon = shapely.affinity.rotate(polygon, -heading, origin=polygon.centroid, use_radians=True)
             width = base_polygon.bounds[3] - base_polygon.bounds[1]
             length = base_polygon.bounds[2] - base_polygon.bounds[0]
             dimensions = (width, length)
-            object_type = trajectory[0]['type']
-            obj_id = trajectory[0]['id']
-            obj = ReasonableCrowdObject(dimensions, object_type, obj_id)
-            for state in trajectory:
-                position = Vector(state['x_meters'], state['y_meters'])
-                velocity = Vector(state['x_velocity_meters_per_second'], state['y_velocity_meters_per_second'])
-                orientation = OrientationVectorPlaceholder(state['heading_radians'])
-                current_polygon = shapely.affinity.rotate(base_polygon, state['heading_radians'], use_radians=True)
-                current_polygon = shapely.affinity.translate(current_polygon, xoff=state['x_meters'] - previous_x, yoff=state['y_meters'] - previous_y)
-                footprint = state['footprint']
-                realization_state = ReasonableCrowdState(obj, position, velocity, orientation, state['step'], footprint)
-                realization_state.polygon = current_polygon
-                obj.trajectory.append(realization_state)
+            object_type = state_list[0]['type']
+            obj_id = state_list[0]['id']
+            assert obj_id != 0
+            if obj_id == -1:
+                obj_id = 0
+
+            obj = ReasonableCrowdObject(obj_id, dimensions, object_type)
+
+            timestamps = np.array([s['timestamp'] for s in state_list])
+
+            # pull all numeric attributes into arrays
+            xs = np.array([s['x_meters'] for s in state_list])
+            ys = np.array([s['y_meters'] for s in state_list])
+            xvs = np.array([s['x_velocity_meters_per_second'] for s in state_list])
+            yvs = np.array([s['y_velocity_meters_per_second'] for s in state_list])
+            headings = np.array([s['heading_radians'] for s in state_list])
+
+            # query times
+            query_times = np.arange(0, max_end_timestamp+1, self.step_size)
+
+            # interpolate everything at once
+            xs_interp = np.interp(query_times, timestamps, xs)
+            ys_interp = np.interp(query_times, timestamps, ys)
+            xvs_interp = np.interp(query_times, timestamps, xvs)
+            yvs_interp = np.interp(query_times, timestamps, yvs)
+            headings = np.unwrap([s['heading_radians'] for s in state_list])
+            headings_interp = np.interp(query_times, timestamps, headings)
+            headings_interp = (headings_interp + np.pi) % (2*np.pi) - np.pi
+
+
+            # build trajectory list (still Python dicts, but now one loop only)
+            for step, (t, x, y, xv, yv, h) in enumerate(
+                zip(query_times, xs_interp, ys_interp, xvs_interp, yvs_interp, headings_interp)
+            ):
+                state = State(
+                    obj,
+                    np.array([x, y]),
+                    np.array([xv, yv]),
+                    OrientationVectorPlaceholder(h),
+                    step,
+                )
+                
+                obj.trajectory.append(state)
+                
             objects.append(obj)
-            
-        realization.objects = objects
+
+        self.objects = objects
+
+
+    def create_realization(self):
+        realization = Realization()
+        realization.objects = self.objects
         return realization
         
                 
