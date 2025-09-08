@@ -1,0 +1,36 @@
+#header
+4
+#rules
+1 "vru_collision" f1
+2 "vehicle_collision" f2
+3 "drivable_area" f3
+4 "vru_ttc" f4
+5 "vru_acknowledgement" f5
+6 "vehicle_ttc" f6
+7 "correct_side" f7
+8 "vru_offroad" f8
+9 "vru_onroad" f9
+11 "front_clearance_buffer" f11_a
+12 "left_clearance_buffer" f12_a
+13 "right_clearance_buffer" f13_a
+15 "speed_limit" f15
+17 "lane_keeping" f17
+18 "lane_centering" f18
+#same-level
+#priorities
+1 2
+2 3
+3 7
+7 8
+7 9
+8 11
+9 11
+11 12
+11 13
+12 17
+13 17
+17 4
+17 6
+4 6
+6 15
+15 18

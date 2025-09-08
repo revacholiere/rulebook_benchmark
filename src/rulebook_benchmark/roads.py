@@ -1,4 +1,5 @@
 # This file includes the some of the classes in Scenic's roads.py, but they are simplified to keep only the necessary properties for the benchmark. 
+from rulebook_benchmark.utils import angle_between, normalize_vector
 
 from scenic.domains.driving.roads import _toVector
 from scenic.core.vectors import Vector
@@ -7,6 +8,7 @@ from typing import FrozenSet, List, Optional, Sequence, Tuple, Union
 import numbers
 from scenic.core.object_types import Point
 from cached_property import cached_property
+import numpy as np
 
 Vectorlike = Union[Vector, Point, Tuple[numbers.Real, numbers.Real]]
 
@@ -44,14 +46,15 @@ class ElementOrientation:
         
     def _get_centerline_orientation(self, point, epsilon=1e-6):
         centerline = self.element.centerline.lineString
-        point = shapely.Point((point.x, point.y))
+        point = shapely.Point(point)
         projection = centerline.project(point)
         previous_point = centerline.interpolate(projection - epsilon)
         next_point = centerline.interpolate(projection + epsilon)
-        direction = Vector(next_point.x, next_point.y) - Vector(previous_point.x, previous_point.y)
-        zero_radian = Vector(1, 0)  # assuming right is 0 radians
-        direction = direction.normalized()
-        angle = zero_radian.angleWith(direction)
+        direction = np.array([next_point.x, next_point.y]) - np.array([previous_point.x, previous_point.y])
+        #direction = Vector(next_point.x, next_point.y) - Vector(previous_point.x, previous_point.y)
+        zero_radian = np.array([1, 0])  # assuming right is 0 radians
+        direction = direction / np.linalg.norm(direction)  # normalize direction
+        angle = angle_between(zero_radian, direction)
         return angle
         
         
@@ -134,6 +137,7 @@ class RegionPlaceholder:
         for intersection in self.intersections:
             polygon = polygon.union(intersection.polygon)
         self.polygons = polygon
+        self.polygon = polygon
         
         
 

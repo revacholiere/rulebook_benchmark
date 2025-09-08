@@ -1,0 +1,8 @@
+#header
+5
+#rules
+2 "vehicle_collision" f2
+3 "drivable_area" f3
+#same-level
+#priorities
+2 3
