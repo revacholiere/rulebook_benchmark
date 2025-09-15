@@ -230,8 +230,8 @@ def vehicle_ttc(handler, step, threshold=0.8):
 f1 = Rule(vru_collision, max)
 f2 = Rule(vehicle_collision, max)
 
-f4 = Rule(vru_ttc, max)
-f6 = Rule(vehicle_ttc, max)
+f4 = Rule(vru_ttc, max, threshold=1.0)
+f6 = Rule(vehicle_ttc, max, threshold=0.8)
 
 def stay_in_drivable_area(handler, step, **kwargs):
     ego = handler.ego
@@ -267,11 +267,11 @@ def vru_clearance(handler, step, on_road=False, threshold = 2):
     return violation
 
 
-f8 = Rule(vru_clearance, max, on_road=False)
-f9 = Rule(vru_clearance, max, on_road=True)
+f8 = Rule(vru_clearance, max, on_road=False, threshold=2)
+f9 = Rule(vru_clearance, max, on_road=True, threshold=2)
 
     
-def vru_acknowledgement(handler, step, threshold = -1, proximity = 1, timesteps = 20):
+def vru_acknowledgement(handler, step, threshold = 0, proximity = 1, timesteps = 20):
     candidates = []
     violation = 0
     for i in range(step, min(step + timesteps, len(handler.realization))):
@@ -294,7 +294,7 @@ def vru_acknowledgement(handler, step, threshold = -1, proximity = 1, timesteps 
         
     return violation
 
-f5 = Rule(vru_acknowledgement, max)
+f5 = Rule(vru_acknowledgement, max, threshold = -1, proximity = 1, timesteps = 20)
 # TODO: vehicle yielding rule based on adv vehicle decelerations
 
 def correct_side(handler, step, **kwargs):
@@ -396,7 +396,7 @@ def lane_centering(handler, step, buffer=0.3): # lane centering
     return distance
 
 
-f18 = Rule(lane_centering, sum)
+f18 = Rule(lane_centering, sum, buffer=0.3)
 # TODO: vehicle yielding rule10, parked vehicle rule 14, turn signal rule 16
 # TODO: lane keeping rule 17, following distance rule 19
 
@@ -446,18 +446,18 @@ def side_clearance(handler, step, left = True, threshold = 0.8):
     return violation
 
 
-f11 = Rule(front_clearance, max)
+f11 = Rule(front_clearance, max, threshold=0.8)
 
-f12 = Rule(side_clearance, max, left=True)
+f12 = Rule(side_clearance, max, left=True, threshold=0.8)
 
-f13 = Rule(side_clearance, max, left=False)
-
-
+f13 = Rule(side_clearance, max, left=False, threshold=0.8)
 
 
 
 
-def clearance_vector_based(handler, step, threshold, front_angle=math.radians(30), side="front"):
+
+
+def clearance_vector_based(handler, step, threshold=0.8, front_angle=math.radians(30), side="front"):
     pool = handler(step)
     ego_state = pool.ego_state
     states = pool.vehicles_in_proximity
@@ -474,9 +474,9 @@ def clearance_vector_based(handler, step, threshold, front_angle=math.radians(30
 
     return violation
 
-f11_v = Rule(clearance_vector_based, max)
-f12_v = Rule(clearance_vector_based, max, side="left")
-f13_v = Rule(clearance_vector_based, max, side="right")
+f11_v = Rule(clearance_vector_based, max, threshold=0.8)
+f12_v = Rule(clearance_vector_based, max, side="left", threshold=0.8)
+f13_v = Rule(clearance_vector_based, max, side="right", threshold=0.8)
 
 '''
 

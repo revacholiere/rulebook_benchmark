@@ -86,8 +86,8 @@ class RealizationObject():
     def __init__(self, object_id, dimensions, object_type):
         self.uid = object_id
         self.dimensions = dimensions
-        self.length = dimensions[1]
-        self.width = dimensions[0]
+        self.length = dimensions[0]
+        self.width = dimensions[1]
 
         self.object_type = object_type
         self.trajectory = []
