@@ -3,64 +3,6 @@ from matplotlib.patches import Polygon
 from matplotlib import animation
 import numpy as np
 
-def realization_gif(realization, dpi=100, interval=100, margin=50):
-    """
-    Generate an animation of the scenario realization (for Jupyter display).
-    Ego is highlighted in red, and the camera follows the ego.
-
-    Args:
-        realization (Realization): The scenario realization.
-        dpi (int): Resolution for each frame.
-        interval (int): Delay between frames in milliseconds.
-        margin (float): Margin (in world units) around ego in the viewport.
-
-    Returns:
-        matplotlib.animation.FuncAnimation
-    """
-    fig, ax = plt.subplots(dpi=dpi)
-    ax.set_aspect("equal")
-
-    # Colors by type
-    colors = {
-        "Car": "blue",
-        "Truck": "purple",
-        "Pedestrian": "orange",
-        "Bicycle": "green"
-    }
-
-    patches = []
-    for obj in realization.objects:
-        # Ego forced to red
-        facecolor = "red" if obj is realization.ego else colors.get(obj.object_type, "gray")
-        poly = Polygon(np.zeros((3, 2)), closed=True, facecolor=facecolor, alpha=0.6)
-        ax.add_patch(poly)
-        patches.append(poly)
-
-    def init():
-        dummy = np.zeros((3, 2))
-        for patch in patches:
-            patch.set_xy(dummy)
-        return patches
-
-    def update(frame):
-        world_state = realization.get_world_state(frame)
-        ego_state = world_state.ego_state
-
-        # Update polygons
-        for patch, state in zip(patches, world_state.states):
-            patch.set_xy(state.polygon.exterior.coords[:-1])
-
-        # Camera follows ego
-        cx, cy = ego_state.position
-        ax.set_xlim(cx - margin, cx + margin)
-        ax.set_ylim(cy - margin, cy + margin)
-
-        ax.set_title(f"Step {frame}")
-        return patches
-
-    anim = animation.FuncAnimation(fig, update, frames=len(realization), init_func=init,
-                                   interval=interval, blit=True)
-    return anim
 
 
 

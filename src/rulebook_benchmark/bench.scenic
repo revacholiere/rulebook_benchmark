@@ -25,7 +25,7 @@ monitor bench():
         for i in range(len(objects)):
             obj = realization.objects[i]
             object = objects[i]
-            obj.trajectory.append(State(obj, np.array([object.position.x, object.position.y]), np.array([object.velocity.x, object.velocity.y]), object.orientation, step, object.steer, object.throttle, object.brake))
+            obj.trajectory.append(State(obj, np.array([object.position.x, object.position.y]), np.array([object.velocity.x, object.velocity.y]), object.orientation, step))
         step += 1
         wait
 
