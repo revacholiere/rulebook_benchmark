@@ -121,7 +121,7 @@ In the `MetaDrivePolicyAgent` class, we replicate the expert policy by convertin
     * throttle/brake of last frame: Directly use the information from MetaDrive.
     * steering of last frame: Directly use the information from MetaDrive.
     * yaw_rate: Directly use the information from MetaDrive.
-    * lateral_offset: The distance to the centerline of the current lane. The value is 0.5 if the ego is on the centerline.
+    * lateral_offset: The distance to the centerline of the current lane. The value is 0.5 if the ego is on the centerline. The value is negative (resp. positive) if the ego is to the right (resp. left) of the centerline.
 
 * Navigation information: The Metadrive expert requires the information of the "current checkpoint" and the "next checkpoint". We assume the planned trajectory of the ego vehicle is provided in Scenic, where the planned trajectory consists of several lanes. Then, the current checkpoint information is based on the current lane, and the next checkpoint information is based on the next lane in the trajectory. We use the ego's position to update the current and the next lane.
 
