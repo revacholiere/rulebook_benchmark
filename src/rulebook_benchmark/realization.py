@@ -213,10 +213,10 @@ class VariableHandler:
         self.vehicle_uids = set(obj.uid for obj in self.realization.other_vehicles)
         self.vru_uids = set(obj.uid for obj in self.realization.vrus)
 
-    def __call__(self, step):
+    def __call__(self, step, **kwargs):
         if step not in self._pools:
-            self._pools[step] = VariablePool(step, self)
-            
+            self._pools[step] = VariablePool(step, self, **kwargs)
+
         self._pools.pop(step - 3, None)  # free memory by removing pools for steps that are no longer needed
         return self._pools[step]
 
@@ -263,7 +263,7 @@ class VariableHandler:
 
 
 class VariablePool:
-    def __init__(self, step, handler, proximity_threshold=3, steps_ahead=50):
+    def __init__(self, step, handler, proximity_threshold=3, steps_ahead=None):
         self.handler = handler
         self.realization = self.handler.realization
         self.other_objects = self.handler.other_objects
@@ -276,7 +276,7 @@ class VariablePool:
         self.vru_states = self.world_state.vru_states
         self.proximity_threshold = proximity_threshold
         self._distances = {}
-        self.steps_ahead = steps_ahead
+        self.steps_ahead = len(self.realization) if steps_ahead is None else steps_ahead
         
     @cached_property
     def ego_state(self):
@@ -339,7 +339,7 @@ class VariablePool:
 
     @cached_property
     def trajectory_behind_linestring(self):
-        return shapely.LineString([state.position for state in self.ego.trajectory[self.step - self.steps_ahead:self.step]])
+        return shapely.LineString([state.position for state in self.ego.trajectory[max(self.step - self.steps_ahead, 0):self.step]])
 
         
         
