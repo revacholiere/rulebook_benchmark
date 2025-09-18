@@ -339,7 +339,7 @@ class VariablePool:
 
     @cached_property
     def trajectory_behind_linestring(self):
-        return shapely.LineString([state.position for state in self.ego.trajectory[max(self.step - self.steps_ahead, 0):self.step]])
+        return shapely.LineString([state.position for state in self.ego.trajectory[max(self.step - self.steps_ahead, 0):self.step + 1]])
 
         
         
