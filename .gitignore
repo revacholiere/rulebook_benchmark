@@ -125,3 +125,5 @@ dmypy.json
 examples/multi_objective/*.txt
 examples/multi_objective/*/outputs*/
 examples/multi_objective/outputs*/
+
+src/reasonable_crowd/outputs/*
