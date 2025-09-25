@@ -5,7 +5,7 @@ from scenic.core.vectors import Vector
 import numpy as np
 import shapely
 from rulebook_benchmark.utils import polygon_distance, in_proximity, intersects
-
+import math
 
 DELTA = 0.1
 
@@ -91,6 +91,11 @@ class RealizationObject():
 
         self.object_type = object_type
         self.trajectory = []
+        
+        
+    @cached_property
+    def radius(self):
+        return math.sqrt(self.width ** 2 + self.length ** 2) / 2
 
     def get_state(self, step):
         try:
@@ -205,6 +210,7 @@ class WorldState():
 class VariableHandler:
     def __init__(self, realization):
         self.realization = realization
+        self.max_steps = len(realization)
         self._pools = {}
         self.ego = realization.ego
         self.objects = realization.objects
@@ -217,7 +223,7 @@ class VariableHandler:
         if step not in self._pools:
             self._pools[step] = VariablePool(step, self, **kwargs)
 
-        self._pools.pop(step - 3, None)  # free memory by removing pools for steps that are no longer needed
+        #self._pools.pop(step - 3, None)  # free memory by removing pools for steps that are no longer needed
         return self._pools[step]
 
     @cached_property
@@ -276,6 +282,7 @@ class VariablePool:
         self.vru_states = self.world_state.vru_states
         self.proximity_threshold = proximity_threshold
         self._distances = {}
+        self._lazy_distances = {}
         self.steps_ahead = len(self.realization) if steps_ahead is None else steps_ahead
         
     @cached_property
@@ -295,6 +302,12 @@ class VariablePool:
             self._distances[uid] = polygon_distance(self.ego_state, other_state)
         return self._distances[uid]
     
+    def center_distance(self, other_state):
+        uid = other_state.uid
+        if uid not in self._lazy_distances:
+            self._lazy_distances[uid] = np.linalg.norm(other_state.position - self.ego_state.position)
+        return self._lazy_distances[uid]
+
     @cached_property
     def vehicles_colliding(self):
         states_in_proximity = self.vehicles_in_proximity

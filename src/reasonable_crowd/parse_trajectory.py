@@ -58,7 +58,7 @@ class ReasonableCrowdTrajectoryParser:
             base_polygon = shapely.affinity.rotate(polygon, -heading, origin=polygon.centroid, use_radians=True)
             width = base_polygon.bounds[3] - base_polygon.bounds[1]
             length = base_polygon.bounds[2] - base_polygon.bounds[0]
-            dimensions = (width, length)
+            dimensions = (length, width)
             object_type = state_list[0]['type']
             obj_id = state_list[0]['id']
             assert obj_id != 0

@@ -24,6 +24,7 @@ class Rulebook:
         """
         self.verbosity = 1
         self.priority_graph = nx.DiGraph()
+        self.in_place_priority_graph = nx.DiGraph()
         self.rule_ids = set()
         self.rule_to_node_id = {}
         if rule_file:
@@ -133,6 +134,9 @@ class Rulebook:
                         rule.print()
                 print(f'Nodes: {self.priority_graph.nodes(data=True)}')
                 print(f'Edges: {self.priority_graph.edges()}')
+                
+                
+        
     
     def add_rule(self, id, name, rule_function):
         """
@@ -407,6 +411,12 @@ class Rulebook:
         
     def __call__(self, traj):
         return self.evaluate_trajectory_all(traj)
+    
+    
+    
+    
+    
+    
     
 class Rule:
     def __init__(self, id, func, name="", description="", args=None):

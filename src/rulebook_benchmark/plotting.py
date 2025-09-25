@@ -27,6 +27,17 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
     for lane in realization_model_pref.network.lanes:
         axes[1].add_patch(Polygon(lane.polygon.exterior.coords[:-1], closed=True,
                                   facecolor="lightgray", edgecolor="black", alpha=0.5))
+        
+        
+    # Highlight ego lane
+    ego_lane1 = realization_human_pref.ego_state.lane
+    if ego_lane1 is not None:
+        axes[0].add_patch(Polygon(ego_lane1.polygon.exterior.coords[:-1], closed=True,
+                                  facecolor="yellow", edgecolor="black", alpha=0.5))
+    ego_lane2 = realization_model_pref.ego_state.lane
+    if ego_lane2 is not None:
+        axes[1].add_patch(Polygon(ego_lane2.polygon.exterior.coords[:-1], closed=True,
+                                  facecolor="yellow", edgecolor="black", alpha=0.5))
 
     # Objects → Human pref
     for obj in realization_human_pref.objects:

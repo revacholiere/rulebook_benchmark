@@ -44,10 +44,10 @@ def in_proximity(ego_state, object_states, threshold):
         if len(object_states) == 0:
             return []
         ego = ego_state.object
-        radius = math.sqrt(ego.width ** 2 + ego.length ** 2) + threshold
+        radius = ego.radius + threshold
         ego_pos = ego_state.position
         adv_positions = np.array([v.position for v in object_states])
-        adv_radii = np.array([math.sqrt(v.object.width ** 2 + v.object.length ** 2) for v in object_states])
+        adv_radii = np.array([v.object.radius for v in object_states])
         distances = np.linalg.norm(adv_positions - ego_pos, axis=1)
         mask = distances < (radius + adv_radii)
         return [v for v, m in zip(object_states, mask) if m]

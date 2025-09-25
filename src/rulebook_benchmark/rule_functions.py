@@ -38,6 +38,13 @@ class Rule:
         # merge init parameters and runtime ones
         params = {**self.parameters, **runtime_params}
         return self.calculate_violation(handler, step, **params)
+    
+    def evaluate(self, handler, **runtime_params):
+        result = Result(aggregation_method=self.aggregation_method)
+        for step in range(handler.max_steps):
+            result.add(self(handler, step, **runtime_params))
+        return result.total_violation
+        
 
 
 
@@ -161,6 +168,7 @@ def lines_intersect(p1, p2, q1, q2):
 
 def early_ttc(ego_pos, ego_vel, adv_pos, adv_vel, threshold, times=3):
     horizon = threshold * times
+    
     ego_end = ego_pos + ego_vel * horizon
     adv_end = adv_pos + adv_vel * horizon
 
@@ -168,8 +176,11 @@ def early_ttc(ego_pos, ego_vel, adv_pos, adv_vel, threshold, times=3):
     if not intersect:
         return False  # no intersection ever
 
+    ego_vel_normalized = normalize_vector(ego_vel)
+    ego_to_adv = normalize_vector(adv_pos - ego_pos)
+    projection = np.dot(ego_vel_normalized, ego_to_adv)        
     # if intersection happens after horizon, skip expensive TTC
-    if t > horizon or u > horizon or t < 0 or u < 0:
+    if t > horizon or u > horizon or t < 0 or u < 0 or projection <= 0:
         return False
 
     return True  # possible interaction, run continuous_ttc
@@ -271,30 +282,35 @@ f8 = Rule(vru_clearance, max, on_road=False, threshold=2)
 f9 = Rule(vru_clearance, max, on_road=True, threshold=2)
 
     
-def vru_acknowledgement(handler, step, threshold = 0, proximity = 1, timesteps = 20):
-    candidates = []
+def vru_acknowledgement(handler, step, threshold = 0, timesteps = 20, velocity = 3):
+    candidates = set()
     violation = 0
+    num_vrus = len(handler.vru_uids)
     for i in range(step, min(step + timesteps, len(handler.realization))):
         pool = handler(i)
-        for state in pool.vru_states:
-            distance = pool.distance(state)
-            if distance < proximity:
-                candidates.append(state.uid)
+        vrus = pool.vrus_in_proximity
+        for vru_state in vrus:
+            candidates.add(vru_state.uid)
+        if len(candidates) == num_vrus:
+            break
 
 
     pool = handler(step)
     ego_acceleration = pool.ego_state.acceleration
     for uid in candidates:
         state = pool.world_state[uid]
-        # project ego acceleration onto the direction from ego to vru
         relative_position = state.position - pool.ego_state.position
         relative_position = normalize_vector(relative_position)
-        ego_acceleration_projected = np.dot(ego_acceleration, relative_position)
-        violation = max(0, ego_acceleration_projected - threshold, violation)
-        
+        # first check if projected velocity towards ego is above threshold
+        projected_velocity = np.dot(state.velocity, relative_position)
+        if projected_velocity > velocity:
+            ego_acceleration_projected = np.dot(ego_acceleration, relative_position)
+            violation = max(0, ego_acceleration_projected - threshold, violation)
+        else:
+            continue
     return violation
 
-f5 = Rule(vru_acknowledgement, max, threshold = -1, proximity = 1, timesteps = 20)
+f5 = Rule(vru_acknowledgement, max, threshold = -1, timesteps = 20, velocity = 3)
 # TODO: vehicle yielding rule based on adv vehicle decelerations
 
 def correct_side(handler, step, **kwargs):
