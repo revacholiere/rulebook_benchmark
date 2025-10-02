@@ -26,5 +26,6 @@ dependencies = [
 	"networkx >= 2.6",
 	"statsmodels >= 0.13.2",
 	'carla >= 0.9.12; python_version <= "3.10" and (platform_system == "Linux" or platform_system == "Windows")',
+	"hydra-core ~= 1.3.2"
 ]
 

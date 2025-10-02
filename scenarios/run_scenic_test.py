@@ -10,14 +10,14 @@ from matplotlib.patches import Polygon
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from shapely.geometry import Polygon as ShapelyPolygon
 
-MAX_STEPS = 100
+MAX_STEPS = 120
 
 def run_metadrive_scenario(file_path, max_steps=100, seed=None, maxIterations=10):
     if seed is not None:
         random.seed(seed)
     scenario = scenic.scenarioFromFile(file_path, model="scenic.simulators.metadrive.model", mode2D=True)
     scene, _ = scenario.generate()
-    simulator = MetaDriveSimulator(sumo_map='../maps/Town05.net.xml')
+    simulator = MetaDriveSimulator(sumo_map='../../maps/Town05.net.xml')
     simulation = simulator.simulate(scene, maxSteps=max_steps, maxIterations=maxIterations)
     if not simulation:
         raise RuntimeError("Simulation failed.")

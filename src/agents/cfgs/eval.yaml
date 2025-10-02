@@ -1,0 +1,31 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/
+agent:
+  type: 'metadrive_ppo'
+scenic:
+  scenario_name: 'crash_waymo'
+  file_path: '../../scenarios/nhtsa_intersection01/nhtsa_intersection01_metadriveppo.scenic'
+  map_file_path: '../../maps/Town04.net.xml'
+  simulator: 'metadrive' # 'newtonian' or 'carla' or 'metadrive'
+  max_steps_per_simulation: 120 # max_steps_per_simulation * 0.02 = the simulation interval
+  max_rejection_sampling_iterations: 2000 # Scenic default is 2000
+rulebook:
+  file_path: 'assets/no_vru.graph'
+  add_reaching_goal_rule: True
+falsification:
+  sampler_type: 'mab' # 'random' or 'halton' or 'ce' (cross-entropy) or 'mab' (multi-armed bandit)
+  active: True # True for 'ce' and 'mab', False for 'random' and 'halton'
+  params:
+    alpha: 0.9
+    thres: 0.0
+    buckets: 5
+    exploration_ratio: 2 # only for 'mab'
+experiment:
+  rng_seed: 1
+  num_seeds: 1
+  num_samples: 10
+visualization:
+  record_simulation: False
+  ids: ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly', 'egoConnectingLanePoly', 'egoEndLanePoly']
+  record_dir: ./outputs/${now:%Y-%m-%d}/

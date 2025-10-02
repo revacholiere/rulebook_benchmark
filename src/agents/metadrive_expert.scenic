@@ -4,7 +4,7 @@ from metadrive_expert_agent import MetaDrivePolicyAgent, MetaDrivePolicyAction
 METADRIVE_ACTOR = [None]
 TRAJECTORY = [None]
 
-class ExpertPolicyCar(Car):
+class MetaDrivePPOPolicyCar(Car):
     actor: None
     controller: None
 
@@ -15,14 +15,14 @@ class ExpertPolicyCar(Car):
     def startDynamicSimulation(self):
         self.controller = MetaDrivePolicyAgent()
 
-behavior ExpertPolicyBehavior(egoTrajectory):
+behavior MetaDrivePPOPolicyBehavior(egoTrajectory):
     action = MetaDrivePolicyAction()
     TRAJECTORY.append(egoTrajectory)
     take action
     while True:
         take action
 
-monitor UpdateState():
+monitor MetaDrivePPOUpdateState():
     while True:
         METADRIVE_ACTOR.append(ego.metaDriveActor)
         wait

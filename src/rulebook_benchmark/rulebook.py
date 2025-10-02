@@ -27,6 +27,8 @@ class Rulebook:
         self.in_place_priority_graph = nx.DiGraph()
         self.rule_ids = set()
         self.rule_to_node_id = {}
+        self.functions = {}
+        self.name_to_id = {}
         if rule_file:
             self._parse_rules(rule_file)
         if rulebook_file:
@@ -44,7 +46,6 @@ class Rulebook:
         function_visitor = FunctionVisitor()
         function_visitor.visit(tree)
 
-        self.functions = {}
         for function_node in function_visitor.functions:
             function_name = function_node.name
             function_code = compile(ast.Module(body=[function_node], type_ignores=[]), '<string>', 'exec')
@@ -95,7 +96,13 @@ class Rulebook:
                     self.rule_to_node_id[rule_id] = rule_id
                     rule_name = rule_info[1]
                     rule_func_name = rule_info[2].strip()
-                    rule_func = self.functions[rule_func_name]
+                    self.name_to_id[rule_name] = rule_id
+                    if not self.functions:
+                        rule_func = None
+                    else:
+                        if rule_func_name not in self.functions:
+                            raise ValueError(f"Rule function {rule_func_name} not found in the rule file.")
+                        rule_func = self.functions[rule_func_name]
                     rule = Rule(id=rule_id, func=rule_func, name=rule_name, description="")
                     self.priority_graph.add_node(rule_id, rules={rule_id: rule})
                     if self.verbosity >= 2:
@@ -408,6 +415,62 @@ class Rulebook:
         if len(list(nx.simple_cycles(self.priority_graph))) > 0:
             print("Cycles in the rulebook:", list(nx.simple_cycles(self.priority_graph)))
             raise ValueError("The rulebook contains cycles. Please double check!")
+        
+    def compute_error_weight(self):
+        level = {}
+        for node in nx.topological_sort(self.priority_graph):
+            if self.priority_graph.in_degree(node) == 0:
+                level[node] = 0
+            else:
+                level[node] = max([level[p] for p in self.priority_graph.predecessors(node)]) + 1
+        
+        ranking_map = {}
+        ranking_count = {}
+        for rank in sorted(level.values()):
+            if rank not in ranking_count:
+                ranking_count[rank] = 1
+            else:
+                ranking_count[rank] += 1
+        count = 0
+        for key, value in reversed(ranking_count.items()):
+            ranking_map[key] = count
+            count += value
+        
+        self.error_weight = {} #node_id -> weight
+        self.sum_error_weight = 0
+        for node in level:
+            self.error_weight[node] = ranking_map[level[node]]
+            self.sum_error_weight += 2**self.error_weight[node]
+        if self.verbosity >= 2:
+            for key, value in sorted(self.error_weight.items()):
+                print(f"Node {key} {self.priority_graph.nodes[key]['rules'][key].name}: level = {value}, weight = {2**value}")
+            print(f"Sum of error weights: {self.sum_error_weight}")
+            
+    def compute_error_value(self, results):
+        """Given a result dictionary from rule evaluation, compute the error value of the sample.
+        Args:
+            results (dict): A dictionary where keys are rule names and values are degrees of violations, where the degree of violation is positive iff the rule is violated.
+        Returns:
+            error_value (int): The computed error value.
+            normalized_error_value (float): The normalized error value in [0, 1].
+            violated_rules (list): A list of names of the violated rules.
+        """
+        if self.verbosity >= 2:
+            print(f"Results:")
+            for rule_name, result in results.items():
+                print(f"  {rule_name}: {result.total_violation}")
+        error_value = 0
+        violated_rules = []
+        for rule_name, result in results.items():
+            if rule_name not in self.name_to_id:
+                continue
+            rule_id = self.name_to_id[rule_name]
+            node_id = self.rule_to_node_id[rule_id]
+            if result.total_violation > 0:
+                error_value += 2**self.error_weight[node_id]
+                violated_rules.append(rule_name)
+        normalized_error_value = error_value / self.sum_error_weight if self.sum_error_weight > 0 else 0
+        return error_value, normalized_error_value, violated_rules
         
     def __call__(self, traj):
         return self.evaluate_trajectory_all(traj)

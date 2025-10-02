@@ -77,7 +77,6 @@ class MetaDrivePolicyAgent(Agent):
             config = get_global_config().copy()
             config["vehicle_config"].update(expert_obs_cfg)
             self._expert_observation = LidarStateObservation(config)
-            print(self._expert_observation.observation_space.shape[0])
             #assert self._expert_observation.observation_space.shape[0] == 275, "Observation not match"
 
         vehicle.config.update(expert_obs_cfg)
@@ -143,7 +142,7 @@ class MetaDrivePolicyAgent(Agent):
         # Distance to left yellow Continuous line, Distance to right Side Walk
         lateral_to_left, lateral_to_right = self._get_distance_to_side(scenic_ego)
         info += [clip(lateral_to_left, 0.0, 1.0), clip(lateral_to_right, 0.0, 1.0)]
-        if VERBOSITY >= 1:
+        if VERBOSITY >= 2:
             print(f"lateral_to_left: {info[0]}, lateral_to_right: {info[1]}")
         
         info += [
@@ -330,7 +329,7 @@ class MetaDrivePolicyAgent(Agent):
             print(f"vehicle pos: {ego_position}, heading: {vehicle.heading}")
             print(f"curr_heading: {curr_heading}, curr_rhs: {curr_rhs}, next_heading: {next_heading}, next_rhs: {next_rhs}")
             print(f"curr_curvature: {curr_curvature}, next_curvature: {next_curvature}")
-        if VERBOSITY >= 1:
+        if VERBOSITY >= 2:
             print(f"curr_idx: {self._trajectory_curr_idx}, next_idx: {self._trajectory_next_idx}")
             print("checkpoint info:", info)
         if VERBOSITY >= 2:
