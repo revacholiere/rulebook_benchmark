@@ -27,5 +27,5 @@ experiment:
   num_samples: 10
 visualization:
   record_simulation: False
-  ids: ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly', 'egoConnectingLanePoly', 'egoEndLanePoly']
+  ids: ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly']
   record_dir: ./outputs/${now:%Y-%m-%d}/

@@ -140,10 +140,7 @@ class Rulebook:
                         rule = self.priority_graph.nodes[id]['rules'][rule_id]
                         rule.print()
                 print(f'Nodes: {self.priority_graph.nodes(data=True)}')
-                print(f'Edges: {self.priority_graph.edges()}')
-                
-                
-        
+                print(f'Edges: {self.priority_graph.edges()}')    
     
     def add_rule(self, id, name, rule_function):
         """
@@ -474,12 +471,6 @@ class Rulebook:
         
     def __call__(self, traj):
         return self.evaluate_trajectory_all(traj)
-    
-    
-    
-    
-    
-    
     
 class Rule:
     def __init__(self, id, func, name="", description="", args=None):

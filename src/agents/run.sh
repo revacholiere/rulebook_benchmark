@@ -4,6 +4,10 @@
 scenarios=(
     "../../scenarios/nhtsa_intersection01/nhtsa_intersection01.scenic"
     "../../scenarios/nhtsa_intersection01/nhtsa_intersection01_metadriveppo.scenic"
+    "../../scenarios/crash_waymo_august_9_2019_1/crash_waymo_august_9_2019_1.scenic"
+    "../../scenarios/crash_waymo_august_9_2019_1/crash_waymo_august_9_2019_1_metadriveppo.scenic"
+    "../../scenarios/crash_waymo_august_12_2019/crash_waymo_august_12_2019.scenic"
+    "../../scenarios/crash_waymo_august_12_2019/crash_waymo_august_12_2019_metadriveppo.scenic"
 )
 
 for scenario in "${scenarios[@]}"; do
