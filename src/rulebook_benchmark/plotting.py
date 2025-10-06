@@ -29,16 +29,6 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
                                   facecolor="lightgray", edgecolor="black", alpha=0.5))
         
         
-    # Highlight ego lane
-    ego_lane1 = realization_human_pref.ego_state.lane
-    if ego_lane1 is not None:
-        axes[0].add_patch(Polygon(ego_lane1.polygon.exterior.coords[:-1], closed=True,
-                                  facecolor="yellow", edgecolor="black", alpha=0.5))
-    ego_lane2 = realization_model_pref.ego_state.lane
-    if ego_lane2 is not None:
-        axes[1].add_patch(Polygon(ego_lane2.polygon.exterior.coords[:-1], closed=True,
-                                  facecolor="yellow", edgecolor="black", alpha=0.5))
-
     # Objects → Human pref
     for obj in realization_human_pref.objects:
         facecolor = "red" if obj is realization_human_pref.ego else colors.get(obj.object_type, "gray")
@@ -90,6 +80,60 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
         return patches1 + patches2
 
     max_frames = max(len(realization_human_pref), len(realization_model_pref))
+    anim = animation.FuncAnimation(fig, update, frames=max_frames, init_func=init,
+                                   interval=interval, blit=True)
+    return anim
+
+
+
+
+def animate_realization(realization, reason, dpi=100, interval=100, margin=50):
+    """
+    Single realization animation.
+    Ego is highlighted in red, and the camera follows the ego.
+    """
+
+    fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
+
+    colors = {"Car": "blue", "Truck": "purple", "Pedestrian": "orange", "Bicycle": "green"}
+    patches = []
+    dummy = np.zeros((3, 2))  # minimal valid polygon
+
+    # Lanes
+    for lane in realization.network.lanes:
+        ax.add_patch(Polygon(lane.polygon.exterior.coords[:-1], closed=True,
+                             facecolor="lightgray", edgecolor="black", alpha=0.5))
+
+    # Objects
+    for obj in realization.objects:
+        facecolor = "red" if obj is realization.ego else colors.get(obj.object_type, "gray")
+        poly = Polygon(dummy, closed=True, facecolor=facecolor, alpha=0.6)
+        ax.add_patch(poly)
+        patches.append(poly)
+
+    # Title and formatting
+    ax.set_title(f"Realization - Reason: {reason}")
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.axis('off')
+
+    def init():
+        for patch in patches:
+            patch.set_xy(dummy)
+        return patches
+
+    def update(frame):
+        ws = realization.get_world_state(min(frame, len(realization) - 1))
+        ego = ws.ego_state
+        for patch, state in zip(patches, ws.states):
+            patch.set_xy(state.polygon.exterior.coords[:-1])
+        cx, cy = ego.position
+        ax.set_xlim(cx - margin, cx + margin)
+        ax.set_ylim(cy - margin, cy + margin)
+        return patches
+
+    max_frames = len(realization)
     anim = animation.FuncAnimation(fig, update, frames=max_frames, init_func=init,
                                    interval=interval, blit=True)
     return anim

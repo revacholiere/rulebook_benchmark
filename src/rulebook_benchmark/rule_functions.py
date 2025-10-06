@@ -9,8 +9,7 @@ from rulebook_benchmark.rulebook import Rule
 import numpy as np
 from rulebook_benchmark.utils import normalize_vector, intersects, angle_between, continuous_ttc
 from numpy.linalg import norm
-
-
+from rulebook_benchmark.rulebook import Relation
 
 
 class Result:
@@ -21,10 +20,7 @@ class Result:
     def add(self, violation):
         self.total_violation = self.aggregation_method((self.total_violation, violation))
         self.violation_history.append(self.total_violation)
-    def __repr__(self):
-        return f"Result(total_violation={self.total_violation}, history={self.violation_history})"
-    def __str__(self):
-        return f"Result(total_violation={self.total_violation}, history={self.violation_history})"
+
 
 
 
@@ -43,6 +39,31 @@ class Rule:
         result = Result(aggregation_method=self.aggregation_method)
         for step in range(handler.max_steps):
             result.add(self(handler, step, **runtime_params))
+        return result.total_violation
+    
+    
+    def evaluate_with_cache(self, handler, rule_parameter_result_dict, scenario, rule_id, **runtime_params):
+        params = self.parameters
+        param_tuple = tuple(sorted(params.items())) if params else ()
+        
+        if rule_id in rule_parameter_result_dict:
+            pass
+        else:
+            rule_parameter_result_dict[rule_id] = {}
+            
+        if param_tuple in rule_parameter_result_dict[rule_id]:
+            pass
+        else:
+            rule_parameter_result_dict[rule_id][param_tuple] = {}
+            
+        if scenario in rule_parameter_result_dict[rule_id][param_tuple]:
+            return rule_parameter_result_dict[rule_id][param_tuple][scenario]
+        
+        result = Result(aggregation_method=self.aggregation_method)
+        for step in range(handler.max_steps):
+            result.add(self(handler, step, **runtime_params))
+        
+        rule_parameter_result_dict[rule_id][param_tuple][scenario] = result.total_violation
         return result.total_violation
         
 
@@ -80,6 +101,41 @@ class RuleEngine:
         for res in results.values():
             res.violation_history += [res.total_violation] * (max_steps - end_index)
 
+        return results
+
+
+    def evaluate_with_cache(self, rule_parameter_result_dict, scenario):
+        rule_id_to_params = {}
+
+        for name, rule in self.rules.items():
+            params = rule.parameters
+            rule_id_to_params[name] = tuple(sorted(params.items())) if params else ()
+        
+
+        # initialize results per rule
+        results = {}
+
+        
+        cached = set()
+        for name in self.rules.keys():
+            if name in rule_parameter_result_dict:
+                pass
+            else:
+                rule_parameter_result_dict[name] = {}
+                
+            if rule_id_to_params[name] in rule_parameter_result_dict[name]:
+                pass
+            else:
+                rule_parameter_result_dict[name][rule_id_to_params[name]] = {}
+                
+            if scenario in rule_parameter_result_dict[name][rule_id_to_params[name]]:
+                violation_score = rule_parameter_result_dict[name][rule_id_to_params[name]][scenario]
+                results[name] = violation_score
+                cached.add(name)
+            else:
+                for d in rule_parameter_result_dict[name]:
+                    print(d)
+                pass
         return results
 
 
@@ -310,7 +366,7 @@ def vru_acknowledgement(handler, step, threshold = 0, timesteps = 20, velocity =
             continue
     return violation
 
-f5 = Rule(vru_acknowledgement, max, threshold = -1, timesteps = 20, velocity = 3)
+f5 = Rule(vru_acknowledgement, max, threshold = -1, timesteps = 30, velocity = 4)
 # TODO: vehicle yielding rule based on adv vehicle decelerations
 
 def correct_side(handler, step, **kwargs):
