@@ -10,7 +10,7 @@ from rulebook_benchmark.rulebook import Rulebook
 from reasonable_crowd.InPlaceRulebook import InPlaceRulebook
 import numpy as np
 import pandas as pd
-from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation
+from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation, number_of_unique_rulebooks
 import pickle
 from sklearn.model_selection import train_test_split
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
@@ -65,7 +65,7 @@ else:
 #pickle.dump(cache_dict, open(os.path.join(output_directory, 'tuning_cache.pkl'), 'wb'))
 
 """ train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
-train_df, val_df = train_test_split(train_df, test_size=0.15, random_state=42)
+train_df, val_df = train_test_split(train_df, test_size=0.5, random_state=42)
 
 print(len(train_df), len(val_df), len(test_df))
 
@@ -114,7 +114,7 @@ df = df.sample(frac=1, random_state=42).reset_index(drop=True)
 X = df['X'].tolist()
 y = df['y'].tolist()
 votes = df['votes'].tolist()
-
+""" 
 kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
 accuracy_list = []
@@ -176,22 +176,15 @@ avg_weighted_accuracy = np.mean(weighted_accuracy_list)
 print("5-Fold Cross-Validation Results:")
 print("Average Correct:", avg_correct)
 print("Average Accuracy:", avg_accuracy)
-print("Average Weighted Accuracy:", avg_weighted_accuracy)
+print("Average Weighted Accuracy:", avg_weighted_accuracy) """
 
-best_rb, best_score = simulated_annealing(rulebook, 
-    train_data=X,
-    train_labels=y,
-    train_votes=y_votes,
-    rule_parameter_result_dict=cache_dict,
-    trajectories_dict=trajectories_dict,
-    max_iter=10000,
-    start_temp=300.0,
-    alpha=0.999,
-    seed=42)
+num_rulebooks, correct, accuracy, unsatisfiable_samples = number_of_unique_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict, seed = 43)
 
-print("Best Score after Simulated Annealing:", best_score)
-
-best_rb, best_score, best_val_score = simulated_annealing_with_validation(rulebook, 
+print("Number of Unique Rulebooks:", num_rulebooks)
+print("Correct:", correct)
+print("Accuracy:", accuracy)
+print("Unsatisfiable Samples:", unsatisfiable_samples)
+""" best_rb, best_score, best_val_score = simulated_annealing_with_validation(rulebook, 
     train_data=train_df['X'].tolist(),
     train_labels=train_df['y'].tolist(),
     train_votes=train_df['votes'].tolist(),
@@ -206,4 +199,4 @@ best_rb, best_score, best_val_score = simulated_annealing_with_validation(rulebo
     seed=42)
 
 print("Best Score after Simulated Annealing with Validation:", best_score)
-print("Best Validation Score after Simulated Annealing with Validation:", best_val_score)
+print("Best Validation Score after Simulated Annealing with Validation:", best_val_score) """

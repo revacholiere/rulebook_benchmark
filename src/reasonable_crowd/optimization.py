@@ -348,3 +348,87 @@ def simulated_annealing_with_validation(rulebook, train_data, train_labels, trai
     pbar.close()
     return best, best_score, best_val_score
 
+
+
+
+
+def simulated_annealing_single_sample(rulebook, train_data, train_labels, train_votes, rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=10.0, alpha=0.995, seed=None):
+    if seed is not None:
+        random.seed(seed)
+
+    
+    current_rulebook = rulebook.copy()
+    current_score = evaluate_rulebook_with_cache(current_rulebook, train_data, train_labels, train_votes, rule_parameter_result_dict, trajectories_dict)[0]
+
+    best = current_rulebook.copy()
+    best_score = current_score
+    if best_score > 0:
+        return best, best_score
+    
+
+    T = start_temp
+
+    pbar = tqdm(total=max_iter, desc="Simulated Annealing", leave=False)
+
+    for i in range(max_iter):
+
+        candidate = random_action(current_rulebook)
+
+        candidate_score = evaluate_rulebook_with_cache(candidate, train_data, train_labels, train_votes, rule_parameter_result_dict, trajectories_dict)[0]
+
+        delta = candidate_score - current_score
+
+        if delta > 0 or random.random() < math.exp(min(0, max(-delta / T, -700))):
+            current_rulebook = candidate
+            current_score = candidate_score
+            pbar.set_description(f"Current: {current_score:.4f}")
+
+            if current_score > best_score:
+                best = current_rulebook.copy()
+                best_score = current_score
+                pbar.set_description(f"New best: {best_score:.4f}")
+                return best, best_score
+
+        T *= alpha
+        pbar.update(1)
+
+    pbar.close()
+    return best, best_score
+
+
+def number_of_unique_rulebooks(rulebook, train_data, train_labels, train_votes, rule_parameter_result_dict, trajectories_dict, seed=None):
+
+    
+    score = 0
+    total = len(train_data)
+    unique_rulebooks = []
+    pbar = tqdm(total=total, desc="Finding Unique Rulebooks", leave=False)
+    unsatisfiable_samples = []
+    
+    for i in range(total):
+        sample = train_data[i:i+1]
+        label = train_labels[i:i+1]
+        votes = train_votes[i:i+1]
+        
+        #assert sc > 0
+        rb, sc = simulated_annealing_single_sample(rulebook, sample, label, votes, rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=15.0, alpha=0.995, seed=seed)
+
+    
+        found = False
+        if sc > 0:
+            for existing_rb in unique_rulebooks:
+                if nx.utils.graphs_equal(existing_rb.in_place_priority_graph, rb.in_place_priority_graph):
+
+                    found = True
+                    break
+
+            if not found:
+                unique_rulebooks.append(rb)
+        else:
+            unsatisfiable_samples.append((sample[0], votes[0]))
+        
+        score += sc
+        pbar.update(1)
+    pbar.close()
+        
+    return len(unique_rulebooks), score, score/total, unsatisfiable_samples
