@@ -1,7 +1,5 @@
 *In this directory, we interface existing driving policies to Scenic for evaluation on the scenarios in our benchmark.*
 
-[toc]
-
 Driving Policies
 ===
 
