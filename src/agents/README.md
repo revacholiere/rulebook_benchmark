@@ -1,6 +1,9 @@
-Driving Agents
+*In this directory, we interface existing driving policies to Scenic for evaluation on the scenarios in our benchmark.*
+
+[toc]
+
+Driving Policies
 ===
-In this directory, we interface existing driving policies with our benchmark for evaluation on the scenarios.
 
 Interface to a Policy
 ---
@@ -121,10 +124,58 @@ In the `MetaDrivePolicyAgent` class, we replicate the expert policy by convertin
     * throttle/brake of last frame: Directly use the information from MetaDrive.
     * steering of last frame: Directly use the information from MetaDrive.
     * yaw_rate: Directly use the information from MetaDrive.
-    * lateral_offset: The distance to the centerline of the current lane. The value is 0.5 if the ego is on the centerline. The value is negative (resp. positive) if the ego is to the right (resp. left) of the centerline.
+    * lateral_offset: The distance to the centerline of the current lane. The value is 0.5 if the ego is on the centerline.
 
 * Navigation information: The Metadrive expert requires the information of the "current checkpoint" and the "next checkpoint". We assume the planned trajectory of the ego vehicle is provided in Scenic, where the planned trajectory consists of several lanes. Then, the current checkpoint information is based on the current lane, and the next checkpoint information is based on the next lane in the trajectory. We use the ego's position to update the current and the next lane.
 
 * Other vehicles' information: Directly use the information from MetaDrive.
 
 * Lidar observations: Directly use the information from MetaDrive.
+    
+
+Evaluation
+===
+
+TL;DR
+---
+Users can specify scenarios in the `run.sh` script and run it to collect evaluation results.
+
+```bash
+#!/bin/bash
+
+# List of scenarios
+scenario_folder="../../scenarios"
+scenarios=(
+    "nhtsa/nhtsa_intersection01.scenic"
+    "crash/crash_waymo_august_9_2019_1.scenic"
+    "crash/crash_waymo_august_12_2019.scenic"
+)
+
+for scenario in "${scenarios[@]}"; do
+    python run_evaluation.py \
+        --config-name=eval.yaml \
+        hydra.job.chdir=False \
+        hydra.output_subdir=null \
+        scenic.file_path="${scenario_folder}/${scenario}"
+done
+```
+
+Evaluation Flow
+---
+In this work, we conduct falsification on the driving agents. Falsification is a simulation-based formal analysis method that identifies failure cases. The falsification flow is an iterative prodecure as follows:
+
+1. The falsifier generates a vector of input parameters
+2. The simulator runs a simulation based on the input parameters
+3. The simualtion result is evaluated against the rulebook specification
+4. For active falsifier, the simulation result serves as feedback to update the falsifier
+5. Repeat 1. to 4.
+
+See `run_evaluation.py` for more details.
+
+### Falsifier 
+
+We provide several sampling algorithms as the falsifier. Two of them are active (*multi-armed bandit sampling* and *cross-entropy sampling*), and two of them are passive (*random sampling* and *Halton sampling*).
+
+### Setup
+
+The setup of the evaluation is defined in `eval.yaml`, where users can defined the settings for Scenic, rulebook specifications, falsifiers, and the number of iterations.
