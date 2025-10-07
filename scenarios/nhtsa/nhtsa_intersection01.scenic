@@ -4,7 +4,6 @@ DESCRIPTION: Ego vehicle goes straight at 4-way intersection and must
 suddenly stop to avoid collision when adversary vehicle from opposite 
 lane makes a left turn.
 SOURCE: NHSTA, #30
-POLICY: Scenic Built-in Agent
 """
 
 #################################
@@ -13,6 +12,7 @@ POLICY: Scenic Built-in Agent
 
 param map = localPath('../../maps/Town05.xodr')
 model scenic.domains.driving.model
+param POLICY = 'built_in'
 
 #################################
 # CONSTANTS                     #
@@ -66,9 +66,16 @@ advSpawnPt = new OrientedPoint in advInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint MODEL,
-    with behavior EgoBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior EgoBehavior(egoTrajectory)
 
 adversary = new Car at advSpawnPt,
     with blueprint MODEL,

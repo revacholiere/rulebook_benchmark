@@ -33,7 +33,7 @@ def main(cfg):
     
 def run_evaluation(cfg, seed):
     ### Initialization ###
-    log.info(f"Running evaluation for {cfg['scenic']['file_path'].split('/')[-1]} with seed: {seed} and falsifier: {cfg['falsification']['sampler_type']}")
+    log.info(f"Running evaluation for {cfg['scenic']['file_path'].split('/')[-1]} with seed: {seed}, policy: {cfg['agent']['type']}, and falsifier: {cfg['falsification']['sampler_type']}")
     random.seed(seed)
     # Simulator
     if cfg['scenic']['simulator'] == 'metadrive':
@@ -80,6 +80,7 @@ def run_evaluation(cfg, seed):
                 param_info += f"{name}: {value} "
         log.info(param_info)
         params['realization'] = realization
+        params['POLICY'] = cfg['agent']['type']
         scenario = scenic.scenarioFromFile(cfg['scenic']['file_path'], model=model, params=params, mode2D=True)
         scene, _ = scenario.generate()
 

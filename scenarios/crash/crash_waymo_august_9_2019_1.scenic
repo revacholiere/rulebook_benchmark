@@ -2,7 +2,6 @@
 TITLE: crash_waymo-august-9-2019-1
 DESCRIPTION: A Waymo Autonomous Vehicle (“Waymo AV”) was in autonomous mode on the off-ramp from eastbound Alma Street to southbound Oregon Expressway in Palo Alto when it was rear-ended. The Waymo AV was traveling approximately less than 1 MPH and yielding to cross-traffic when a passenger vehicle made contact with the Waymo AV's rear bumper at approximately 5 MPH. The Waymo AV sustained minor damage to the rear bumper, and the passenger vehicle sustained minor damage to its front bumper. There were no injuries reported at the scene.
 SOURCE: DMV REPORT
-POLICY: Scenic Built-in Agent
 """
 
 #################################
@@ -11,6 +10,7 @@ POLICY: Scenic Built-in Agent
 
 param map = localPath('../../maps/Town05.xodr')
 model scenic.domains.driving.model
+param POLICY = 'built_in'
 
 #################################
 # CONSTANTS                     #
@@ -56,9 +56,16 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 #################################
 
 # The Waymo AV (ego) is placed at the spawn point and executes its behavior.
-ego = new Car at egoSpawnPt,
-    with blueprint MODEL,
-    with behavior WaymoBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior WaymoBehavior(egoTrajectory)
 
 # The passenger vehicle (adversary) is spawned behind the Waymo AV
 # and follows its lane, leading to a rear-end collision.

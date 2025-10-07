@@ -7,7 +7,6 @@ of the Waymo AV. The passenger vehicle was traveling at approximately 8 MPH, and
 The Waymo AV sustained minor damage to its rear bumper, and the passenger vehicle sustained minor damage to its front bumper.
 There were no injuries reported at the scene.
 SOURCE: DMV REPORT
-POLICY: MetaDrive PPO Agent
 """
 
 #################################
@@ -16,7 +15,7 @@ POLICY: MetaDrive PPO Agent
 
 param map = localPath('../../maps/Town05.xodr')
 model scenic.domains.driving.model
-from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+param POLICY = 'built_in'
 
 #################################
 # CONSTANTS                     #
@@ -68,9 +67,16 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
-    with blueprint MODEL,
-    with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior WaymoBehavior(egoTrajectory)
 
 adversary = new Car following roadDirection for globalParameters.PASSENGER_DIST,
     with blueprint MODEL,
@@ -94,7 +100,6 @@ terminate when (distance to egoSpawnPt) > TERM_DIST
 
 from rulebook_benchmark import bench
 require monitor bench.bench()
-require monitor MetaDrivePPOUpdateState()
 
 #################################
 # RECORDING                     #

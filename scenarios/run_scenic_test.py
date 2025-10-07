@@ -10,20 +10,21 @@ from matplotlib.patches import Polygon
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 from shapely.geometry import Polygon as ShapelyPolygon
 
-MAX_STEPS = 120
+MAX_STEPS = 100
 
 def run_metadrive_scenario(file_path, max_steps=100, seed=None, maxIterations=10):
     if seed is not None:
         random.seed(seed)
+    scenic.setDebuggingOptions(verbosity=1, fullBacktrace=True, debugExceptions=False, debugRejections=False)
     scenario = scenic.scenarioFromFile(file_path, model="scenic.simulators.metadrive.model", mode2D=True)
     scene, _ = scenario.generate()
-    simulator = MetaDriveSimulator(sumo_map='../../maps/Town05.net.xml')
+    simulator = MetaDriveSimulator(sumo_map='../maps/Town05.net.xml')
     simulation = simulator.simulate(scene, maxSteps=max_steps, maxIterations=maxIterations)
     if not simulation:
         raise RuntimeError("Simulation failed.")
     return simulation
 
-def visualize_simulation(simulation, ids, save_path='trajactory.mp4', fps=10, trail_length=15):
+def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, trail_length=15):
     trajectories = {}
     for id in ids:
         if id not in simulation.records:
@@ -118,10 +119,87 @@ def visualize_simulation(simulation, ids, save_path='trajactory.mp4', fps=10, tr
     ani.save(save_path, writer=writer)
     plt.close(fig)
     print(f"Video saved to {save_path}")
+
+def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, trail_length=15):
+    trajectories = simulation.trajectory  # [(pos1, pos2, ...), (pos1, pos2, ...), ...]
+    num_frames = len(trajectories)
+
+    # Determine global plot limits
+    all_x, all_y = [], []
+    for frame in trajectories:
+        for pos in frame:
+            all_x.append(pos.x)
+            all_y.append(pos.y)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_aspect('equal', 'box')
+    ax.set_xlim(min(all_x) - 5, max(all_x) + 5)
+    ax.set_ylim(min(all_y) - 5, max(all_y) + 5)
+
+    # Initialize storage for all objects seen so far
+    scatters = {}
+    trails = {}
+    colors = plt.cm.tab10.colors  # 10 distinct colors
+
+    def update(frame_idx):
+        artists = []
+        positions = trajectories[frame_idx]
+        num_objects = len(positions)
+
+        # Ensure we have scatter + trail for each object seen so far
+        for i in range(num_objects):
+            if i not in scatters:
+                color = colors[i % len(colors)]
+                scatters[i] = ax.plot([], [], 'o', color=color, markersize=6)[0]
+                trails[i] = []
+
+            pos = positions[i]
+            x, y = pos.x, pos.y
+            scatters[i].set_data([x], [y])
+            artists.append(scatters[i])
+
+            # Add trail
+            if frame_idx > 0 and i < len(trajectories[frame_idx - 1]):
+                prev = trajectories[frame_idx - 1][i]
+                line, = ax.plot([prev.x, x], [prev.y, y],
+                                color=colors[i % len(colors)], alpha=0.6, linewidth=2)
+                trails[i].append(line)
+
+                # Keep only the last `trail_length` segments
+                if len(trails[i]) > trail_length:
+                    old_line = trails[i].pop(0)
+                    old_line.remove()
+
+                # Fade older trail segments
+                for j, l in enumerate(trails[i]):
+                    l.set_alpha((j + 1) / trail_length)
+
+                artists.extend(trails[i])
+
+        # Handle objects that disappeared
+        for i in list(scatters.keys()):
+            if i >= num_objects:  # object no longer in this frame
+                scatters[i].set_data([], [])
+                # optionally remove trails too
+                for line in trails[i]:
+                    line.remove()
+                trails[i] = []
+                artists.append(scatters[i])
+
+        return artists
+
+    ani = FuncAnimation(fig, update, frames=num_frames, blit=True, interval=1000 / fps, repeat=False)
+
+    writer = FFMpegWriter(fps=fps, codec="libx264", bitrate=-1)
+    ani.save(save_path, writer=writer)
+    plt.close(fig)
+    print(f"Video saved to {save_path}")
     
 if __name__ == "__main__":
-    ids = ['egoPoly', 'advPoly', 'bicyclePoly']
-    simulation = run_metadrive_scenario("crash_waymo-august-12-2019/crash_waymo-august-12-2019.scenic", max_steps=MAX_STEPS, seed=123)
-    #ids = ['egoPoly', 'adv1Poly', 'adv2Poly', 'adv3Poly']
-    #simulation = run_metadrive_scenario("multi_02/multi_02.scenic", max_steps=MAX_STEPS, seed=123)
-    visualize_simulation(simulation, ids)
+    #ids = ['egoPoly', 'advPoly', 'bicyclePoly']
+    #simulation = run_metadrive_scenario("crash_waymo-august-12-2019/crash_waymo-august-12-2019.scenic", max_steps=MAX_STEPS, seed=123)
+    ids = ['egoPoly', 'trailingCarPoly', 'trailingCar2Poly']#, 'parkedCar2Poly']
+    simulation = run_metadrive_scenario("basic/basic.scenic", max_steps=MAX_STEPS, seed=123)
+    print(len(simulation.trajectory), len(simulation.trajectory[0]))
+    print(simulation.trajectory[0], simulation.trajectory[1], simulation.trajectory[51], simulation.trajectory[99])
+    #visualize_simulation(simulation, ids)
+    visualize_simulation_points(simulation)

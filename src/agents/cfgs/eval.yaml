@@ -2,7 +2,7 @@ hydra:
   run:
     dir: ./outputs/${now:%Y-%m-%d}/
 agent:
-  type: 'metadrive_ppo'
+  type: 'metadrive_ppo' # 'built_in' or 'metadrive_ppo'
 scenic:
   scenario_name: 'crash_waymo'
   file_path: '../../scenarios/nhtsa_intersection01/nhtsa_intersection01_metadriveppo.scenic'
@@ -24,7 +24,7 @@ falsification:
 experiment:
   rng_seed: 1
   num_seeds: 1
-  num_samples: 10
+  num_samples: 100
 visualization:
   record_simulation: False
   ids: ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly']
