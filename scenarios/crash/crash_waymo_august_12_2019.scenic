@@ -82,7 +82,7 @@ adversary = new Car following roadDirection for globalParameters.PASSENGER_DIST,
     with blueprint MODEL,
     with behavior FollowLaneBehavior(target_speed=globalParameters.PASSENGER_SPEED)
 
-bicycle = new Vehicle offset by (4, BICYCLE_DIST),
+bicycle = new Car offset by (4, BICYCLE_DIST),
     with blueprint BICYCLE_MODEL,
     with behavior BicycleBehavior()
 
@@ -95,7 +95,7 @@ require (distance from adversary to intersection) < INIT_DIST
 #require ego.laneSection._slowerLane is not None
 require bicycle.laneSection._fasterLane is not None
 require next ego.lane is not bicycle.lane
-terminate when (distance to adversary) < (ego.length + adversary.length) / 2
+#terminate when (distance to adversary) < (ego.length + adversary.length) / 2
 terminate when (distance to egoSpawnPt) > TERM_DIST
 
 from rulebook_benchmark import bench

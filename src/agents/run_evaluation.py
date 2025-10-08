@@ -57,8 +57,11 @@ def run_evaluation(cfg, seed):
     # Results
     avg_error_value = 0
     avg_normalized_error_value = 0
+    max_error_value = 0
+    max_normalized_error_value = 0
     ce_ratio = 0
     rule_violation_count = {rule: 0 for rule in rulebook.get_rule_names()}
+    unique_violations = set()
     
     for i in range(cfg['experiment']['num_samples']):
         ### Generate a sample ###
@@ -100,18 +103,24 @@ def run_evaluation(cfg, seed):
         log.info(f"Error value: {error_value}, Normalized error value: {normalized_error_value}, Violated rules: {violated_rules}")
         avg_error_value += error_value
         avg_normalized_error_value += normalized_error_value
+        max_error_value = max(max_error_value, error_value)
+        max_normalized_error_value = max(max_normalized_error_value, normalized_error_value)
         if len(violated_rules) > 0:
             ce_ratio += 1
             for rule in violated_rules:
                 rule_violation_count[rule] += 1
+        unique_violations.add(tuple(sorted(violated_rules)))
         
         ### Update the sampler ###
         if cfg['falsification']['active']:
             sampler.update(sample, normalized_error_value, log)
         
-    log.info(f"Average error value: {avg_error_value/cfg['experiment']['num_samples']:.3f}, Average normalized error value: {avg_normalized_error_value/cfg['experiment']['num_samples']:.3f}, Counterexample ratio: {ce_ratio/cfg['experiment']['num_samples']:.3f}")
+    log.info(f"Average error value: {avg_error_value/cfg['experiment']['num_samples']:.3f}, Average normalized error value: {avg_normalized_error_value/cfg['experiment']['num_samples']:.3f}, Counterexample ratio: {ce_ratio/cfg['experiment']['num_samples']:.3f}, Max error value: {max_error_value:.3f}, Max normalized error value: {max_normalized_error_value:.3f}")
     log.info(f"Rule violation count: {rule_violation_count}")
     log.info("Sample counts: " + str({k: [int(x - 1) for x in v] for k, v in sampler.counts.items()}))
+    log.info(f"Number of unique violations: {len(unique_violations)}")
+    unique_violations_lists = [list(s) for s in unique_violations]
+    log.info("Unique violations: " + str(unique_violations_lists))
         
 def get_rule_violations(realization):
     handler = VariableHandler(realization)
