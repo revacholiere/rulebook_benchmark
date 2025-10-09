@@ -291,7 +291,6 @@ def simulated_annealing(rulebook, train_data, train_labels, train_votes, rule_pa
         if delta > 0 or random.random() < math.exp(min(0, max(-delta / T, -700))):
             current_rulebook = candidate
             current_score = candidate_score
-            pbar.set_description(f"Current: {current_score:.4f}")
 
             if current_score > best_score:
                 best = current_rulebook.copy()
@@ -352,7 +351,7 @@ def simulated_annealing_with_validation(rulebook, train_data, train_labels, trai
 
 
 
-def simulated_annealing_single_sample(rulebook, train_data, train_labels, train_votes, rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=10.0, alpha=0.995, seed=None):
+def simulated_annealing_small_set(rulebook, train_data, train_labels, train_votes, rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=10.0, alpha=0.995, seed=None):
     if seed is not None:
         random.seed(seed)
 
@@ -362,7 +361,7 @@ def simulated_annealing_single_sample(rulebook, train_data, train_labels, train_
 
     best = current_rulebook.copy()
     best_score = current_score
-    if best_score > 0:
+    if best_score == len(train_data):
         return best, best_score
     
 
@@ -381,13 +380,14 @@ def simulated_annealing_single_sample(rulebook, train_data, train_labels, train_
         if delta > 0 or random.random() < math.exp(min(0, max(-delta / T, -700))):
             current_rulebook = candidate
             current_score = candidate_score
-            pbar.set_description(f"Current: {current_score:.4f}")
 
             if current_score > best_score:
                 best = current_rulebook.copy()
                 best_score = current_score
                 pbar.set_description(f"New best: {best_score:.4f}")
+            if best_score == len(train_data): # perfect score
                 return best, best_score
+
 
         T *= alpha
         pbar.update(1)
@@ -411,14 +411,13 @@ def number_of_unique_rulebooks(rulebook, train_data, train_labels, train_votes, 
         votes = train_votes[i:i+1]
         
         #assert sc > 0
-        rb, sc = simulated_annealing_single_sample(rulebook, sample, label, votes, rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=15.0, alpha=0.995, seed=seed)
+        rb, sc = simulated_annealing_small_set(rulebook, sample, label, votes, rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=15.0, alpha=0.995, seed=seed)
 
     
         found = False
         if sc > 0:
             for existing_rb in unique_rulebooks:
                 if nx.utils.graphs_equal(existing_rb.in_place_priority_graph, rb.in_place_priority_graph):
-
                     found = True
                     break
 
@@ -432,3 +431,61 @@ def number_of_unique_rulebooks(rulebook, train_data, train_labels, train_votes, 
     pbar.close()
         
     return len(unique_rulebooks), score, score/total, unsatisfiable_samples
+
+
+
+def find_scenario_rulebooks(base_rulebook, all_pairs, all_labels, all_votes, rule_parameter_result_dict, trajectories_dict):
+    scenario_to_samples = {}
+
+    for name, trajectory in trajectories_dict.items():
+        parts = name.split('-')
+        scenario_name = parts[0]
+        if scenario_name not in scenario_to_samples:
+            scenario_to_samples[scenario_name] = {}
+            scenario_to_samples[scenario_name]['X'] = []
+            scenario_to_samples[scenario_name]['y'] = []
+            scenario_to_samples[scenario_name]['votes'] = []
+
+    for i in range(len(all_pairs)):
+        pair = all_pairs[i]
+        label = all_labels[i]
+        votes = all_votes[i]
+        parts = pair[0].split('-')
+        scenario_name = parts[0]
+        scenario_to_samples[scenario_name]['X'].append(pair)
+        scenario_to_samples[scenario_name]['y'].append(label)
+        scenario_to_samples[scenario_name]['votes'].append(votes)
+
+    rulebooks = []
+    total = 0
+    correct = 0
+    
+    pbar = tqdm(total=len(scenario_to_samples), desc="Finding Rulebooks for Scenarios", leave=False)
+    print("Number of scenarios:", len(scenario_to_samples))
+    for name, traj_dict in scenario_to_samples.items():
+        rulebook, score = simulated_annealing_small_set(base_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=10.0, alpha=0.995, seed=42)
+        #print(f"Scenario: {name}, Score: {score}/{len(traj_dict['X'])}")
+        traj_dict['rulebook'] = rulebook
+        traj_dict['score'] = score/len(traj_dict['X'])
+        total += len(traj_dict['X'])
+        correct += score
+
+        found = False
+        for existing_rb in rulebooks:
+            if nx.utils.graphs_equal(existing_rb.in_place_priority_graph, rulebook.in_place_priority_graph):
+                found = True
+                break
+        if not found:
+            rulebooks.append(rulebook)
+        
+        pbar.update(1)
+    pbar.close()
+
+    num_rulebooks = len(rulebooks)
+    print(f"Average Accuracy across scenarios: {correct/total if total > 0 else 0}")
+    print(f"Number of Unique Rulebooks across scenarios: {num_rulebooks}")
+    
+        
+        
+    
+

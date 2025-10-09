@@ -10,7 +10,7 @@ from rulebook_benchmark.rulebook import Rulebook
 from reasonable_crowd.InPlaceRulebook import InPlaceRulebook
 import numpy as np
 import pandas as pd
-from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation, number_of_unique_rulebooks
+from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation, number_of_unique_rulebooks, find_scenario_rulebooks
 import pickle
 from sklearn.model_selection import train_test_split
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
@@ -178,12 +178,12 @@ print("Average Correct:", avg_correct)
 print("Average Accuracy:", avg_accuracy)
 print("Average Weighted Accuracy:", avg_weighted_accuracy) """
 
-num_rulebooks, correct, accuracy, unsatisfiable_samples = number_of_unique_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict, seed = 43)
+#num_rulebooks, correct, accuracy, unsatisfiable_samples = number_of_unique_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict, seed = 43)
 
-print("Number of Unique Rulebooks:", num_rulebooks)
-print("Correct:", correct)
-print("Accuracy:", accuracy)
-print("Unsatisfiable Samples:", unsatisfiable_samples)
+#print("Number of Unique Rulebooks:", num_rulebooks)
+#print("Correct:", correct)
+#print("Accuracy:", accuracy)
+#print("Unsatisfiable Samples:", unsatisfiable_samples)
 """ best_rb, best_score, best_val_score = simulated_annealing_with_validation(rulebook, 
     train_data=train_df['X'].tolist(),
     train_labels=train_df['y'].tolist(),
@@ -200,3 +200,6 @@ print("Unsatisfiable Samples:", unsatisfiable_samples)
 
 print("Best Score after Simulated Annealing with Validation:", best_score)
 print("Best Validation Score after Simulated Annealing with Validation:", best_val_score) """
+
+
+find_scenario_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict)
