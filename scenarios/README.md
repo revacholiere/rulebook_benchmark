@@ -22,4 +22,4 @@ Near-Accident Scenarios
 ---
 ### LLM-Assisted Scenic Code Generation
 
-We provide an LLM-assisted flow to generate Scenic code from DMV crash reports written in natural language. In the prompt, we guide the LLM by providing the typical structure of a Scenic program and several crash report-Scenic code example pairs. See `scenicnl.py` for more details. To run the flow, users need to paste their Google Gemini API keys in `scenicnl.py`.
+We provide an LLM-assisted flow to generate Scenic code from DMV crash reports written in natural language ([source of the reports](https://github.com/KE7/ScenarioNL-CA-AV-Crash/tree/86f72268c5320be8a92ec6b3d76ef6963f668cf0/crash_reports/hard)). In the prompt, we guide the LLM by providing the typical structure of a Scenic program and several crash report-Scenic code example pairs. See `scenicnl.py` for more details. To run the flow, users need to paste their Google Gemini API keys in `scenicnl.py`.
