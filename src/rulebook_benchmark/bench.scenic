@@ -12,7 +12,7 @@ monitor bench():
     objs = []
     ids = 0
     for obj in objects:
-        objs.append(RealizationObject(ids, (obj.length, obj.width), type(obj).__name__))
+        objs.append(RealizationObject(ids, (obj.width, obj.length), type(obj).__name__))
         ids += 1
     realization.objects = objs
 
@@ -23,7 +23,6 @@ monitor bench():
         for i in range(len(objects)):
             obj = realization.objects[i]
             object = objects[i]
-            orient = Orientation.fromEuler(object.orientation.yaw + np.pi/2, object.orientation.pitch, object.orientation.roll)
             obj.trajectory.append(State(obj, np.array([object.position.x, object.position.y]), np.array([object.velocity.x, object.velocity.y]), object.orientation, step))
         step += 1
         wait
