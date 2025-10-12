@@ -15,6 +15,7 @@ class Realization():
         self.objects = None
         self.ego_index = ego_index
         self.delta = delta
+        self.isScenic = False
 
     def __len__(self):
         return len(self.objects[self.ego_index].trajectory)
@@ -229,6 +230,10 @@ class VariableHandler:
     @cached_property
     def trajectory_linestring(self):
         return shapely.LineString([state.position for state in self.ego.trajectory])
+    
+    @cached_property
+    def isScenic(self):
+        return self.realization.isScenic
 
     @cached_property
     def other_objects(self):

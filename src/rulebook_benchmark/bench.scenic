@@ -6,13 +6,13 @@ import numpy as np
 monitor bench():
     realization = globalParameters['realization']
     realization.network = Network.fromFile(globalParameters['map'])
-
+    realization.isScenic = True
     objects = simulation().objects
     #max_steps = realization.max_steps
     objs = []
     ids = 0
     for obj in objects:
-        objs.append(RealizationObject(ids, (obj.width, obj.length), type(obj).__name__))
+        objs.append(RealizationObject(ids, (obj.length, obj.width), type(obj).__name__))
         ids += 1
     realization.objects = objs
 
@@ -23,7 +23,10 @@ monitor bench():
         for i in range(len(objects)):
             obj = realization.objects[i]
             object = objects[i]
-            obj.trajectory.append(State(obj, np.array([object.position.x, object.position.y]), np.array([object.velocity.x, object.velocity.y]), object.orientation, step))
+            yaw = object.orientation.yaw + np.pi / 2
+            yaw = ((yaw + np.pi/2) % np.pi) - np.pi/2
+            orient = Orientation.fromEuler(yaw, object.orientation.pitch, object.orientation.roll)
+            obj.trajectory.append(State(obj, np.array([object.position.x, object.position.y]), np.array([object.velocity.x, object.velocity.y]), orient, step))
         step += 1
         wait
 

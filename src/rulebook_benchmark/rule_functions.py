@@ -374,8 +374,13 @@ def correct_side(handler, step, **kwargs):
     lane = ego_state.lane
     if lane is None:
         return 0
+    
+    rot = 0
+    if handler.isScenic:
+        rot = np.pi/2
+    
     ego_orientation = ego_state.orientation.yaw
-    lane_orientation = lane.orientation.value(ego_state.position)
+    lane_orientation = lane.orientation.value(ego_state.position) + rot
 
     if math.cos(lane_orientation - ego_orientation) < 0:
         return 1
