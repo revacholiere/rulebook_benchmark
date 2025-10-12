@@ -50,7 +50,7 @@ def evaluate_rulebook_with_cache(rulebook, X, y, y_votes, rule_parameter_result_
         r1 = evaluations[t1]
         r2 = evaluations[t2]
 
-        model_pref = rulebook.compare_results(r1, r2)
+        model_pref, reason = rulebook.compare_results(r1, r2)
         if model_pref == label:
             correct += 1
             if model_pref == Relation.LARGER:
@@ -65,8 +65,10 @@ def evaluate_rulebook_with_cache(rulebook, X, y, y_votes, rule_parameter_result_
             total_votes += v2
 
         if model_pref == Relation.NONCOMPARABLE:
+            print("Incomparable:", t1, t2, reason)
             incomparable += 1
         if model_pref == Relation.EQUAL:
+            print("Equal:", t1, t2, reason)
             equal += 1
         
         

@@ -49,17 +49,23 @@ class InPlaceRulebook:
         def win_condition(set1, set2):
             for rule in set1:
                 if all(nx.has_path(self.in_place_priority_graph, rule, other) for other in set2):
-                    return True
-            return False
+                    return True, rule
+            return False, None
+        
+        win_1, winning_rule_1 = win_condition(r1_advocates, r2_advocates)
+        
 
-        if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_condition(r1_advocates, r2_advocates):
-            return Relation.LARGER
-        elif (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_condition(r2_advocates, r1_advocates):
-            return Relation.SMALLER
+        if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_1:
+            return Relation.LARGER, winning_rule_1
+
+        win_2, winning_rule_2 = win_condition(r2_advocates, r1_advocates)
+        
+        if (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_2:
+            return Relation.SMALLER, winning_rule_2
         elif len(r1_advocates) == 0 and len(r2_advocates) == 0:
-            return Relation.EQUAL
+            return Relation.EQUAL, None
         else:
-            return Relation.NONCOMPARABLE
+            return Relation.NONCOMPARABLE, None
 
         
     def _compare_trajectories(self, rule_id, handler1, handler2, r1_advocates, r2_advocates):
@@ -86,17 +92,21 @@ class InPlaceRulebook:
         def win_condition(set1, set2):
             for rule in set1:
                 if all(nx.has_path(self.in_place_priority_graph, rule, other) for other in set2):
-                    return True
-            return False
+                    return True, rule
+            return False, None
 
-        if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_condition(r1_advocates, r2_advocates):
-            return Relation.LARGER
-        elif (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_condition(r2_advocates, r1_advocates):
-            return Relation.SMALLER
+        win_1, winning_rule_1 = win_condition(r1_advocates, r2_advocates)
+
+        if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_1:
+            return Relation.LARGER, winning_rule_1
+
+        win_2, winning_rule_2 = win_condition(r2_advocates, r1_advocates)
+        if (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_2:
+            return Relation.SMALLER, winning_rule_2
         elif len(r1_advocates) == 0 and len(r2_advocates) == 0:
-            return Relation.EQUAL
+            return Relation.EQUAL, None
         else:
-            return Relation.NONCOMPARABLE
+            return Relation.NONCOMPARABLE, None
 
     def _compare_results(self, rule_id, results1, results2, r1_advocates, r2_advocates):
         result1 = results1[rule_id]
