@@ -102,8 +102,8 @@ def optimize_rulebook_grid_bruteforce(rulebook, dataset, labels, votes, rule_id_
             current_rule = graph.nodes[rule_id]['rule']
             current_rule.parameters.update(params)
 
-        # time the evaluation
-        score, incorrect, equal, incomparable, total = evaluate_rulebook_with_cache(rulebook, dataset, labels, votes, rule_parameter_result_dict, trajectories_dict)
+
+        score = evaluate_rulebook_with_cache(rulebook, dataset, labels, votes, rule_parameter_result_dict, trajectories_dict)[0]
 
 
         if verbose >= 2:
@@ -191,7 +191,11 @@ def optimize_rulebook_grid_bruteforce_with_validation(rulebook, training_data, t
 
     return best_config, best_score, best_val_score
 
-
+def swap_nodes(g, u, v):
+    # Create a mapping that swaps u and v labels
+    mapping = {u: v, v: u}
+    # Relabel the graph with copy=False to modify in place
+    return nx.relabel_nodes(g, mapping, copy=True)
 
 def is_acyclic(graph):
     return nx.is_directed_acyclic_graph(graph)
@@ -211,8 +215,9 @@ def random_action(rulebook, max_attempts=10):
         g = new_rulebook.in_place_priority_graph
         nodes = list(g.nodes)
         edges = list(g.edges)
-
-        action_type = random.choice(["add", "remove", "swap"])
+        #choices = ["add", "remove", "swap"]
+        choices = ["swap"]
+        action_type = random.choice(choices)
 
         if action_type == "add":
             u, v = random.sample(nodes, 2)
@@ -231,29 +236,9 @@ def random_action(rulebook, max_attempts=10):
         elif action_type == "swap":
             if len(nodes) >= 2:
                 u, v = random.sample(nodes, 2)
-                preds_u, succs_u = list(g.predecessors(u)), list(g.successors(u))
-                preds_v, succs_v = list(g.predecessors(v)), list(g.successors(v))
-
-                g.remove_node(u)
-                g.remove_node(v)
-                g.add_node(u)
-                g.add_node(v)
-
-                for p in preds_v:
-                    if p != u:
-                        g.add_edge(p, u)
-                for s in succs_v:
-                    if s != u:
-                        g.add_edge(u, s)
-
-                for p in preds_u:
-                    if p != v:
-                        g.add_edge(p, v)
-                for s in succs_u:
-                    if s != v:
-                        g.add_edge(v, s)
-            else:
-                continue  # resample if not enough nodes
+                g = swap_nodes(g, u, v)
+        else:
+            continue
 
         # Validate acyclicity
         if is_acyclic(g) and is_weakly_connected(g):
@@ -456,14 +441,15 @@ def find_scenario_rulebooks(base_rulebook, all_pairs, all_labels, all_votes, rul
         scenario_to_samples[scenario_name]['y'].append(label)
         scenario_to_samples[scenario_name]['votes'].append(votes)
 
-    rulebooks = []
+    rulebooks = {}
     total = 0
     correct = 0
+    num_unique_rulebooks = 0
     
     pbar = tqdm(total=len(scenario_to_samples), desc="Finding Rulebooks for Scenarios", leave=False)
     print("Number of scenarios:", len(scenario_to_samples))
     for name, traj_dict in scenario_to_samples.items():
-        rulebook, score = simulated_annealing_small_set(base_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, max_iter=1000, start_temp=10.0, alpha=0.995, seed=42)
+        rulebook, score = simulated_annealing_small_set(base_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, max_iter=100, start_temp=10.0, alpha=0.995, seed=42)
         #print(f"Scenario: {name}, Score: {score}/{len(traj_dict['X'])}")
         traj_dict['rulebook'] = rulebook
         traj_dict['score'] = score/len(traj_dict['X'])
@@ -471,21 +457,76 @@ def find_scenario_rulebooks(base_rulebook, all_pairs, all_labels, all_votes, rul
         correct += score
 
         found = False
-        for existing_rb in rulebooks:
+        for existing_rb in rulebooks.values():
             if nx.utils.graphs_equal(existing_rb.in_place_priority_graph, rulebook.in_place_priority_graph):
                 found = True
+                rulebooks[name] = existing_rb
                 break
         if not found:
-            rulebooks.append(rulebook)
+            rulebooks[name] = rulebook
+            num_unique_rulebooks += 1
         
         pbar.update(1)
     pbar.close()
 
-    num_rulebooks = len(rulebooks)
-    print(f"Average Accuracy across scenarios: {correct/total if total > 0 else 0}")
-    print(f"Number of Unique Rulebooks across scenarios: {num_rulebooks}")
+
+    return rulebooks, num_unique_rulebooks, correct, correct/total, scenario_to_samples
     
+    
+
+def shuffle_graph_nodes(g, seed=None):
+    """
+    Returns a new graph identical in structure to g,
+    but with node labels randomly permuted.
+    """
+    if seed is not None:
+        random.seed(seed)
+
+    nodes = list(g.nodes())
+    shuffled = nodes[:]
+    random.shuffle(shuffled)
+
+    mapping = dict(zip(nodes, shuffled))
+    return nx.relabel_nodes(g, mapping, copy=True)
         
+        
+        
+
+def random_dag_from_nodes(nodes, seed=None):
+    """
+    Create a random connected DAG (no cycles) using the given node IDs.
+    Ensures if a path exists from A→B, no redundant edge A→B is added.
+    """
+    if seed is not None:
+        random.seed(seed)
+
+    nodes = list(nodes)
+    n = len(nodes)
+    g = nx.DiGraph()
+    g.add_nodes_from(nodes)
+
+    # random topological order
+    order = nodes[:]
+    random.shuffle(order)
+
+    # ensure weak connectivity (tree-like backbone)
+    for i in range(1, n):
+        parent = random.choice(order[:i])
+        g.add_edge(parent, order[i])
+
+    # add extra edges while keeping DAG property
+    possible_edges = [
+        (u, v) for i, u in enumerate(order)
+        for v in order[i+1:]
+        if not g.has_edge(u, v)
+    ]
+
+    random.shuffle(possible_edges)
+    for u, v in possible_edges:
+        if not nx.has_path(g, v, u):  # avoid cycle
+            g.add_edge(u, v)
+
+    return g
         
     
 

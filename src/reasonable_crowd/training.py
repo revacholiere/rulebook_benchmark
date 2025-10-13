@@ -15,6 +15,7 @@ import pickle
 from sklearn.model_selection import train_test_split
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
 from sklearn.model_selection import KFold
+from reasonable_crowd.visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
 
 path_to_reasonable_crowd = "../../../Reasonable-Crowd"
 map_directory = path_to_reasonable_crowd + '/maps'
@@ -202,4 +203,14 @@ print("Best Score after Simulated Annealing with Validation:", best_score)
 print("Best Validation Score after Simulated Annealing with Validation:", best_val_score) """
 
 
-find_scenario_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict)
+rulebooks, num_unique_rulebooks, correct, accuracy = find_scenario_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict)
+
+print("Number of Unique Rulebooks across scenarios:", num_unique_rulebooks)
+print("Correct:", correct)
+print("Accuracy:", accuracy)
+
+# Visualize one of the rulebooks
+for name, rb in rulebooks.items():
+    print(f"Plotting priority graph for scenario: {name}")
+    plot_two_rulebooks_side_by_side(rulebook.in_place_priority_graph, rb.in_place_priority_graph)
+    break  # plot only one

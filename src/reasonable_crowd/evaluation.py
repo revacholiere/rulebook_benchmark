@@ -44,7 +44,7 @@ def evaluate_rulebook_with_cache(rulebook, X, y, y_votes, rule_parameter_result_
     total = len(X)
     total_votes = 0
     correct_votes = 0
-    
+    reasons = []
 
     for (t1, t2), label, (v1, v2) in zip(X, y, y_votes):
         r1 = evaluations[t1]
@@ -65,16 +65,18 @@ def evaluate_rulebook_with_cache(rulebook, X, y, y_votes, rule_parameter_result_
             total_votes += v2
 
         if model_pref == Relation.NONCOMPARABLE:
-            print("Incomparable:", t1, t2, reason)
+            #print("Incomparable:", t1, t2, reason)
             incomparable += 1
         if model_pref == Relation.EQUAL:
-            print("Equal:", t1, t2, reason)
+            #print("Equal:", t1, t2, reason)
             equal += 1
+            
+        reasons.append(reason)
         
         
         
-        accuracy = correct/total
-        weighted_accuracy = correct_votes/total_votes if total_votes > 0 else 0.0
+    accuracy = correct/total 
+    weighted_accuracy = correct_votes/total_votes if total_votes > 0 else 0.0
 
 
-    return correct, equal, incomparable, total, accuracy, weighted_accuracy
+    return correct, equal, incomparable, total, accuracy, weighted_accuracy, reasons
