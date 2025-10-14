@@ -5,6 +5,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 import scenic
 import random
 from scenic.simulators.metadrive import MetaDriveSimulator
+from scenic.simulators.newtonian import NewtonianSimulator
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib.animation import FuncAnimation, FFMpegWriter
@@ -24,13 +25,26 @@ def run_metadrive_scenario(file_path, max_steps=100, seed=None, maxIterations=10
         raise RuntimeError("Simulation failed.")
     return simulation
 
-def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, trail_length=15):
+def run_newtonian_scenario(file_path, max_steps=100, seed=None, maxIterations=10):
+    if seed is not None:
+        random.seed(seed)
+    scenic.setDebuggingOptions(verbosity=1, fullBacktrace=True, debugExceptions=False, debugRejections=False)
+    scenario = scenic.scenarioFromFile(file_path, model="scenic.simulators.newtonian.driving_model", mode2D=True)
+    scene, _ = scenario.generate()
+    simulator = NewtonianSimulator()
+    simulation = simulator.simulate(scene, maxSteps=max_steps, maxIterations=maxIterations)
+    if not simulation:
+        raise RuntimeError("Simulation failed.")
+    return simulation
+
+def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, trail_length=15, truncate=0):
     trajectories = {}
     for id in ids:
         if id not in simulation.records:
             print(f"ID {id} not found in simulation records.")
             return
         trajectories[id] = simulation.records[id]
+        trajectories[id] = trajectories[id][truncate:]
         
     # Number of frames = max length across vehicles
     num_frames = max(len(traj) for traj in trajectories.values())
@@ -66,7 +80,9 @@ def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, tr
 
     # Determine global plot limits
     all_x, all_y = [], []
-    for traj in trajectories.values():
+    for vid, traj in trajectories.items():
+        if 'Lane' in str(vid):  # Lane polygon
+            continue
         for poly in traj:
             poly = poly[1]
             x, y = poly.exterior.xy
@@ -122,6 +138,13 @@ def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, tr
 
 def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, trail_length=15):
     trajectories = simulation.trajectory  # [(pos1, pos2, ...), (pos1, pos2, ...), ...]
+    # Truncate initial frames where positions are not float type (for NewtonianSimulator)
+    start_idx = 0
+    for frame in trajectories:
+        if all(isinstance(pos.x, float) and isinstance(pos.y, float) for pos in frame):
+            break
+        start_idx += 1
+    trajectories = trajectories[start_idx:]
     num_frames = len(trajectories)
 
     # Determine global plot limits
@@ -197,9 +220,10 @@ def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, 
 if __name__ == "__main__":
     #ids = ['egoPoly', 'advPoly', 'bicyclePoly']
     #simulation = run_metadrive_scenario("crash_waymo-august-12-2019/crash_waymo-august-12-2019.scenic", max_steps=MAX_STEPS, seed=123)
-    ids = ['egoPoly', 'trailingCarPoly', 'trailingCar2Poly']#, 'parkedCar2Poly']
-    simulation = run_metadrive_scenario("basic/basic.scenic", max_steps=MAX_STEPS, seed=123)
-    print(len(simulation.trajectory), len(simulation.trajectory[0]))
-    print(simulation.trajectory[0], simulation.trajectory[1], simulation.trajectory[51], simulation.trajectory[99])
-    #visualize_simulation(simulation, ids)
-    visualize_simulation_points(simulation)
+    ids = ['egoPoly', 'advPoly', 'adv2Poly', 'egoLanePoly', 'advLanePoly', 'adv2LanePoly']
+    #simulation = run_metadrive_scenario("basic/basic_test.scenic", max_steps=MAX_STEPS, seed=123)
+    simulation = run_newtonian_scenario("basic/basic_test.scenic", max_steps=MAX_STEPS, seed=123)
+    
+    #print(len(simulation.trajectory), len(simulation.trajectory[0]))
+    visualize_simulation(simulation, ids, truncate=1)
+    #visualize_simulation_points(simulation)
