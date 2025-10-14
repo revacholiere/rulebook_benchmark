@@ -200,8 +200,14 @@ def swap_nodes(g, u, v):
 def is_acyclic(graph):
     return nx.is_directed_acyclic_graph(graph)
 
-def is_weakly_connected(graph):
-    return nx.is_weakly_connected(graph)
+def no_redundant_edges(graph):
+    for n in graph.nodes:
+        successors = set(graph.successors(n))
+        for s in successors:
+            if len(list(nx.all_simple_paths(graph, n, s))) > 1:
+                return False
+    return True
+                
 
 def random_action(rulebook, max_attempts=10):
     """
@@ -215,8 +221,8 @@ def random_action(rulebook, max_attempts=10):
         g = new_rulebook.in_place_priority_graph
         nodes = list(g.nodes)
         edges = list(g.edges)
-        #choices = ["add", "remove", "swap"]
-        choices = ["swap"]
+        choices = ["add", "remove", "swap"]
+        #choices = ["swap"]
         action_type = random.choice(choices)
 
         if action_type == "add":
@@ -240,8 +246,8 @@ def random_action(rulebook, max_attempts=10):
         else:
             continue
 
-        # Validate acyclicity
-        if is_acyclic(g) and is_weakly_connected(g):
+        # Validate the modified graph
+        if is_acyclic(g) and no_redundant_edges(g):
             new_rulebook.in_place_priority_graph = g
             return new_rulebook
 
@@ -489,7 +495,16 @@ def shuffle_graph_nodes(g, seed=None):
     mapping = dict(zip(nodes, shuffled))
     return nx.relabel_nodes(g, mapping, copy=True)
         
-        
+    
+    
+def shuffle_rulebook(rulebook, seed=None):
+    if seed is not None:
+        random.seed(seed)
+    new_rulebook = rulebook.copy()
+    g = new_rulebook.in_place_priority_graph
+    g = shuffle_graph_nodes(g, seed=seed)
+    new_rulebook.in_place_priority_graph = g
+    return new_rulebook
         
 
 def random_dag_from_nodes(nodes, seed=None):

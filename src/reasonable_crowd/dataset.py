@@ -7,6 +7,7 @@ import pickle
 import json
 from rulebook_benchmark.rulebook import Relation
 import numpy as np
+import choix
 
 def _parse_single_file(filename, trajectory_directory, network_U, network_S, step_size):
     traj_path = os.path.join(trajectory_directory, filename)
@@ -74,6 +75,62 @@ def load_annotations(path_to_reasonable_crowd):
 
 
 def build_evaluation_dataset(data):
+    X, y, y_votes = [], [], []
+
+    for scenario, annotations in data.items():
+        # Collect all items and pairwise counts
+        items = set()
+        pair_counts = {}
+
+        for pair, votes in annotations.items():
+            t1, t2 = pair.split(" ;; ")
+            items.update([t1, t2])
+            pair_counts[(t1, t2)] = len(votes)
+    
+        items = sorted(items)
+        id_to_idx = {item: i for i, item in enumerate(items)}
+        n = len(items)
+        comp_mat = np.zeros((n, n), dtype=int)
+        
+        for (t1, t2), count in pair_counts.items():
+            i, j = id_to_idx[t1], id_to_idx[t2]
+            comp_mat[i, j] = count
+            
+        scores = choix.ilsr_pairwise_dense(comp_mat + 1e-3, max_iter=1000, tol=1e-9)
+        
+        added = set()
+        
+        for (t1, t2), count12 in pair_counts.items():
+            if (t1, t2) in added or (t2, t1) in added:
+                continue
+            if (t2, t1) in pair_counts:
+                count21 = pair_counts[(t2, t1)]
+                added.add((t1, t2))
+                added.add((t2, t1))
+            else:
+                print("this should not happen: build_evaluation_dataset reverse pair missing")
+                assert False
+                
+                
+            i, j = id_to_idx[t1], id_to_idx[t2]
+            s1, s2 = scores[i], scores[j]
+            
+            if s1 > s2:
+                human_pref = Relation.LARGER
+            elif s1 < s2:
+                human_pref = Relation.SMALLER
+            else:
+                print("this should not happen: build_evaluation_dataset equal scores")
+                continue
+            
+            
+            X.append((t1, t2))
+            y.append(human_pref)
+            y_votes.append((count12, count21))
+            
+    return X, y, y_votes
+    
+    
 
     X = []
     y = []

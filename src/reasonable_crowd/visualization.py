@@ -39,13 +39,16 @@ def plot_topological_graph(G, figsize=(8,6), node_size=500,
     # Normalize weights → alpha
     def normalize_colors(G, weights):
         if not weights:
-            return {n: (0, 0, 0, 0.8) for n in G.nodes()}
-        vals = list(weights.values())
+            return {n: (0, 0, 0, 0.3) for n in G.nodes()}
+        vals = list(weights.values()) + [0]  # include zero baseline
         mn, mx = min(vals), max(vals)
         colors = {}
         for n in G.nodes():
-            w = weights.get(n, mn)
-            a = 0.3 + 0.7 * ((w - mn) / (mx - mn)) if mx != mn else 1.0
+            w = weights.get(n, 0)
+            if mx == mn:
+                a = 0.3 if w == 0 else 1.0  # make weighted nodes dark, others light
+            else:
+                a = 0.3 + 0.7 * ((w - mn) / (mx - mn))
             colors[n] = (0, 0, 0, a)
         return colors
 
@@ -100,14 +103,17 @@ def plot_two_rulebooks_side_by_side(G1, G2, weights1=None, weights2=None,
 
     def normalize_colors(G, weights):
         if not weights:
-            return {n: (0,0,0,0.8) for n in G.nodes()}
-        vals = list(weights.values())
+            return {n: (0, 0, 0, 0.3) for n in G.nodes()}
+        vals = list(weights.values()) + [0]  # include zero baseline
         mn, mx = min(vals), max(vals)
         colors = {}
         for n in G.nodes():
-            w = weights.get(n, mn)
-            a = 0.3 + 0.7*((w - mn)/(mx - mn)) if mx != mn else 1.0
-            colors[n] = (0,0,0,a)
+            w = weights.get(n, 0)
+            if mx == mn:
+                a = 0.3 if w == 0 else 1.0  # make weighted nodes dark, others light
+            else:
+                a = 0.3 + 0.7 * ((w - mn) / (mx - mn))
+            colors[n] = (0, 0, 0, a)
         return colors
 
     pos1 = topological_positions(G1, x_shift=-x_offset/2)
