@@ -5,14 +5,34 @@ We collect two types of scenarios in this benchmark: **basic maneuver scenarios*
 
 Creating a Scenic Scenario
 ---
-We use `crash/crash_waymo_august_12_2019.scenic` as an example. To test different driving policies for the scenario, we introduce a parameter `POLICY` in each Scenic file. Currently, the value of the parameter could be either `'build_in'` or `'metadrive_ppo'`. If `POLICY` is set to  `'build_in'`, the ego behavior defined in the Scenic file is used to control the ego vehicle. Otherwise, if `POLICY` is set to `'metadrive_ppo'`, the MetaDrive PPO agent is used (see `src/agents/` for more details). The ego's behavior can be defined using the following code:
-
-```python
+To test different driving policies for the scenario, we introduce a parameter `POLICY` in each Scenic file. Currently, we support three policies:
+1. `'build_in'`: Use the behaviors defined in the Scenic files to control the ego vehicle. The behaviors are basically rule-based planners with PID controllers.
+2. `'metadrive_ppo'`: Use the MetaDrive PPO agent to control the ego vehicle (see `src/agents/` for more details). We assume the trajectory of the ego vehicle is given. Below is an example of how to set the ego's behavior to `MetaDrivePPOPolicyBehavior`.
+```scenic
 from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
 ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
     with blueprint MODEL,
     with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
 require monitor MetaDrivePPOUpdateState()
+```
+3. `'ppo_with_built_in'`: Sometimes if the ego's trajectory is not available, we may need to use rule-based planners to guide the ego vehicle, while using the MetaDrive PPO agent to perform the control. Here is an example, where the MetaDrive PPO agent only focuses on the lane following parts:
+```scenic
+behavior EgoPPOBehavior():
+    try:
+        do MetaDrivePPOFollowLaneBehavior()
+    interrupt when withinDistanceToAnyObjs(self, BYPASS_DIST[0]):
+        fasterLaneSec = self.laneSection.fasterLane
+        do LaneChangeBehavior(
+                laneSectionToSwitch=fasterLaneSec,
+                target_speed=globalParameters.EGO_SPEED)
+        do MetaDrivePPOFollowLaneBehavior() \
+            until (distance to adversary) > BYPASS_DIST[1] and (apparent heading of adversary) > 1.57
+        slowerLaneSec = self.laneSection.slowerLane
+        do LaneChangeBehavior(
+                laneSectionToSwitch=slowerLaneSec,
+                target_speed=globalParameters.EGO_SPEED)
+        do MetaDrivePPOFollowLaneBehavior() for TERM_TIME seconds
+        terminate 
 ```
 
 Basic Maneuver Scenarios
