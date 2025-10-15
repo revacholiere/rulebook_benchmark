@@ -40,6 +40,10 @@ def run_evaluation(cfg, seed):
         from scenic.simulators.metadrive import MetaDriveSimulator
         simulator = MetaDriveSimulator(sumo_map=cfg['scenic']['map_file_path'])
         model = "scenic.simulators.metadrive.model"
+    elif cfg['scenic']['simulator'] == 'newtonian':
+        from scenic.simulators.newtonian import NewtonianSimulator
+        simulator = NewtonianSimulator()
+        model = "scenic.simulators.newtonian.driving_model"
     else:
         raise NotImplementedError(f"Simulator {cfg['scenic']['simulator']} not supported.")
     # Input parameter space and sampler
@@ -68,7 +72,6 @@ def run_evaluation(cfg, seed):
         log.info(f"Sample {i+1}/{cfg['experiment']['num_samples']}")
         realization = Realization()
         sample = sampler.getSample()
-        print(f"Sampled feature: {sample}")
         params = {}
         param_info = "Sampled parameters: "
         if not isinstance(sample, dict): # random, halton
@@ -113,8 +116,9 @@ def run_evaluation(cfg, seed):
         
         ### Update the sampler ###
         if cfg['falsification']['active']:
-            sampler.update(sample, normalized_error_value, log)
-        
+            sampler.update(sample, normalized_error_value)
+    
+    log.info(f"Results for {cfg['scenic']['file_path'].split('/')[-1]} with seed: {seed}, policy: {cfg['agent']['type']}, and falsifier: {cfg['falsification']['sampler_type']}")
     log.info(f"Average error value: {avg_error_value/cfg['experiment']['num_samples']:.3f}, Average normalized error value: {avg_normalized_error_value/cfg['experiment']['num_samples']:.3f}, Counterexample ratio: {ce_ratio/cfg['experiment']['num_samples']:.3f}, Max error value: {max_error_value:.3f}, Max normalized error value: {max_normalized_error_value:.3f}")
     log.info(f"Rule violation count: {rule_violation_count}")
     log.info("Sample counts: " + str({k: [int(x - 1) for x in v] for k, v in sampler.counts.items()}))

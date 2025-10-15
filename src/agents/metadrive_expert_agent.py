@@ -438,9 +438,19 @@ class MetaDrivePolicyAgent(Agent):
         det = x1*y2 - y1*x2          # z-component of 2D cross
         return math.atan2(det, max(-1.0, min(1.0, dot)))
 
+    def reset_idx(self):
+        self._trajectory_curr_idx = 0
+        self._trajectory_next_idx = 1
+        
 class MetaDrivePolicyAction(AgentAction):
+    def __init__(self, reset_idx=False):
+        super().__init__()
+        self.reset_idx = reset_idx
+        
     def applyTo(self, agent, simulation):
         agent.update_actor()
+        if self.reset_idx:
+            agent.controller.reset_idx()
         throttle, brake, steer = agent.controller.run_step(agent.actor, agent, agent.trajectory)
         if VERBOSITY >= 2:
             print(f"throttle: {throttle}, brake: {brake}, steer: {steer}")

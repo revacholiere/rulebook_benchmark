@@ -22,6 +22,15 @@ behavior MetaDrivePPOPolicyBehavior(egoTrajectory):
     while True:
         take action
 
+behavior MetaDrivePPOFollowLaneBehavior():
+    action = MetaDrivePolicyAction(reset_idx=True)
+    while True:
+        current_lane = self.lane
+        next_lane = current_lane.successor
+        egoTrajectory = [current_lane, next_lane]
+        TRAJECTORY.append(egoTrajectory)
+        take action
+
 monitor MetaDrivePPOUpdateState():
     while True:
         METADRIVE_ACTOR.append(ego.metaDriveActor)

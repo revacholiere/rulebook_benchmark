@@ -66,7 +66,7 @@ advSpawnPt = new OrientedPoint in advInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-if globalParameters.POLICY == 'metadrive_ppo':
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
     from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
     ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
         with blueprint MODEL,

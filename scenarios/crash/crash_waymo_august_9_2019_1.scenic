@@ -56,7 +56,7 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 #################################
 
 # The Waymo AV (ego) is placed at the spawn point and executes its behavior.
-if globalParameters.POLICY == 'metadrive_ppo':
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
     from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
     ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
         with blueprint MODEL,

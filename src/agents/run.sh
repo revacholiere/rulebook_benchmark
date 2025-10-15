@@ -3,9 +3,12 @@
 # List of scenarios
 scenario_folder="../../scenarios"
 scenarios=(
-    "nhtsa/nhtsa_intersection01.scenic"
     "crash/crash_waymo_august_9_2019_1.scenic"
     "crash/crash_waymo_august_12_2019.scenic"
+    crash/crash_apple_10232023.scenic
+    crash/crash_apple_082321.scenic
+    "nhtsa/nhtsa_intersection01.scenic"
+    "nhtsa/nhtsa_bypassing01.scenic"
 )
 
 for scenario in "${scenarios[@]}"; do
