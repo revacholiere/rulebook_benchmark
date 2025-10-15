@@ -6,7 +6,7 @@ We collect two types of scenarios in this benchmark: **basic maneuver scenarios*
 Creating a Scenic Scenario
 ---
 To test different driving policies for the scenario, we introduce a parameter `POLICY` in each Scenic file. Currently, we support three policies:
-1. `'build_in'`: Use the behaviors defined in the Scenic files to control the ego vehicle. The behaviors are basically rule-based planners with PID controllers.
+1. `'built_in'`: Use the behaviors defined in the Scenic files to control the ego vehicle. The behaviors are basically rule-based planners with PID controllers.
 2. `'metadrive_ppo'`: Use the MetaDrive PPO agent to control the ego vehicle (see `src/agents/` for more details). We assume the trajectory of the ego vehicle is given. Below is an example of how to set the ego's behavior to `MetaDrivePPOPolicyBehavior`.
 ```scenic
 from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
