@@ -218,12 +218,14 @@ def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, 
     print(f"Video saved to {save_path}")
     
 if __name__ == "__main__":
-    #ids = ['egoPoly', 'advPoly', 'bicyclePoly']
-    #simulation = run_metadrive_scenario("crash_waymo-august-12-2019/crash_waymo-august-12-2019.scenic", max_steps=MAX_STEPS, seed=123)
-    ids = ['egoPoly', 'advPoly', 'adv2Poly', 'egoLanePoly', 'advLanePoly', 'adv2LanePoly']
-    #simulation = run_metadrive_scenario("basic/basic_test.scenic", max_steps=MAX_STEPS, seed=123)
-    simulation = run_newtonian_scenario("basic/basic_test.scenic", max_steps=MAX_STEPS, seed=123)
+    scenario_to_ids = {
+        "nhtsa_intersection01": ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly'],
+        "crash_cruise_032721-pdf": ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly'],
+    }
+    scenario = "crash_cruise_032721-pdf"
+    simulation = run_metadrive_scenario(f"{scenario.split('_')[0]}_gemini/{scenario}_gemini.scenic", max_steps=MAX_STEPS, seed=123)
+    #simulation = run_newtonian_scenario(f"{scenario}/{scenario}.scenic", max_steps=MAX_STEPS, seed=123)
+    ids = scenario_to_ids[scenario]
     
-    #print(len(simulation.trajectory), len(simulation.trajectory[0]))
-    visualize_simulation(simulation, ids, truncate=1)
+    visualize_simulation(simulation, ids, truncate=0)
     #visualize_simulation_points(simulation)
