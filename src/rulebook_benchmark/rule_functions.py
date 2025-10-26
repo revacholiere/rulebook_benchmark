@@ -316,7 +316,7 @@ def stay_in_drivable_area(handler, step, **kwargs):
 f3 = Rule(stay_in_drivable_area, max)
 
 
-def vru_clearance(handler, step, on_road=False, threshold = 2):
+def vru_clearance(handler, step, on_road, threshold):
     pool = handler(step)
     vru_states = pool.vrus_in_proximity
     violation = 0
@@ -334,11 +334,11 @@ def vru_clearance(handler, step, on_road=False, threshold = 2):
     return violation
 
 
-f8 = Rule(vru_clearance, max, on_road=False, threshold=2)
-f9 = Rule(vru_clearance, max, on_road=True, threshold=2)
+f8 = Rule(vru_clearance, max, on_road=False, threshold=1)
+f9 = Rule(vru_clearance, max, on_road=True, threshold=1)
 
     
-def vru_acknowledgement(handler, step, threshold = 0, timesteps = 20, velocity = 3):
+def vru_acknowledgement(handler, step, threshold = 0, timesteps = 20, velocity = 4):
     candidates = set()
     violation = 0
     num_vrus = len(handler.vru_uids)
@@ -398,7 +398,7 @@ def speed_limit(handler, step, threshold=15): # speed limit
     
     return max(0, ego_velocity - speed_limit)**2
 
-f15 = Rule(speed_limit, max)
+f15 = Rule(speed_limit, max, threshold=15)
 
 def lane_keeping(handler, step):
     if step == 0:

@@ -1,7 +1,10 @@
 import shapely
 import numpy as np
 from shapely.strtree import STRtree
-from rulebook_benchmark.utils import angle_between
+from rulebook_benchmark.utils import angle_between, normalize_angle
+
+    
+
 
 def isObjectInLane(state, lane):  # check if the object's center is in the lane
     lane_polygon = lane.polygon
@@ -103,20 +106,15 @@ def secondPass(obj, ambiguous_lanes, network):
 
             angles = []
 
-            if len(candidate_lanes_2) > 1:
-                last_resort = candidate_lanes_2
-            elif len(candidate_lanes) > 1:
-                last_resort = candidate_lanes
-            else:
-                last_resort = lanes
-
+            last_resort = lanes
+            
             obj_orientation = obj.get_state(step).orientation.yaw
             obj_orientation = obj_orientation % (2 * np.pi)
             for lane in last_resort:  # workaround for when no candidate lanes are found
                 lane_orientation = lane.orientation.value(obj.get_state(step).position)
                 lane_orientation = lane_orientation % (2 * np.pi)
                 angles.append(
-                    abs(lane_orientation - obj_orientation)
+                    abs(normalize_angle(lane_orientation - obj_orientation))
                 )
             min_idx = angles.index(min(angles))
             obj.trajectory[step].lane = lanes[min_idx]
@@ -124,6 +122,7 @@ def secondPass(obj, ambiguous_lanes, network):
                 
             
         else:
+            print("this should not happen: secondPass no intersection found", step)
             prev_lane = obj.get_state(step - 1).lane if step > 0 else None
             if prev_lane is not None:
                 for lane in lanes:
@@ -135,15 +134,15 @@ def secondPass(obj, ambiguous_lanes, network):
             else:
                 angles = []
                 for lane in lanes:
-                    lane_orientation = lane.orientation.value(obj.get_state(step).position)
-                    obj_orientation = obj.get_state(step).orientation.yaw
+                    lane_orientation = lane.orientation.value(obj.get_state(step).position) % (2 * np.pi)
+                    obj_orientation = obj.get_state(step).orientation.yaw % (2 * np.pi)
                     # ensure both angles are in the range [0, 2*pi)
                     lane_orientation = lane_orientation % (2 * np.pi)
                     obj_orientation = obj_orientation % (2 * np.pi)
                     
                     
                     angles.append(
-                        abs(lane_orientation - obj_orientation)
+                        abs(normalize_angle(lane_orientation - obj_orientation))
                     )
                 min_idx = angles.index(min(angles))
                 obj.trajectory[step].lane = lanes[min_idx]

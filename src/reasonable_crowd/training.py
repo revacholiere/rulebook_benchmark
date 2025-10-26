@@ -17,6 +17,10 @@ from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
 from sklearn.model_selection import KFold
 from reasonable_crowd.visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
 
+SEED = 42
+NUM_RUNS = 5
+
+
 path_to_reasonable_crowd = "../../../Reasonable-Crowd"
 map_directory = path_to_reasonable_crowd + '/maps'
 trajectory_directory = path_to_reasonable_crowd + '/trajectories'
@@ -49,7 +53,7 @@ rule_id_to_rule = {1: f1, 2: f2, 3: f3, 4: f4, 5: f5, 6: f6, 7: f7, 8: f8, 9: f9
 rulebook = InPlaceRulebook(rb.priority_graph, rule_id_to_rule)
 
 rule_id_to_params = {4: ["threshold"], 6: ["threshold"], 8: ["threshold"], 9: ["threshold"], 5: ["velocity", "threshold", "timesteps"], 11: ["threshold"], 12: ["threshold"], 13: ["threshold"], 18: ["buffer"]}
-rule_id_to_values = {4: {"threshold": [0.3, 0.5, 0.8, 1]}, 6: {"threshold": [0.3, 0.5, 0.8, 1]}, 8: {"threshold": [0.5, 1, 1.5, 2]}, 9: {"threshold": [0.5 , 1, 1.5, 2]}, 5: {"velocity": [4], "threshold": [-1, -0.5, -0.2, 0], "timesteps": [30]}, 11: {"threshold": [0.5, 0.8, 1, 1.5]}, 12: {"threshold": [0.5, 0.8, 1, 1.5]}, 13: {"threshold": [0.5, 0.8, 1, 1.5]}, 18: {"buffer": [0.3, 0.5, 0.8]}}
+rule_id_to_values = {4: {"threshold": [0.6, 0.8, 1, 1.2]}, 6: {"threshold": [0.6, 0.8, 1, 1.2]}, 8: {"threshold": [0.5, 1, 1.5, 2]}, 9: {"threshold": [0.5 , 1, 1.5, 2]}, 5: {"velocity": [4], "threshold": [-1.5, -1, -0.5], "timesteps": [30]}, 11: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 12: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 13: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 18: {"buffer": [0.3, 0.5, 0.8]}}
 
 if os.path.exists(os.path.join(output_directory, 'tuning_cache.pkl')):
     print("Loading cached rule evaluations...")
@@ -62,6 +66,25 @@ else:
     cache_dict = {}
     cache_rule_evaluations(rulebook, rule_id_to_params, rule_id_to_values, X, y, cache_dict, trajectories_dict)
     pickle.dump(cache_dict, open(os.path.join(output_directory, 'tuning_cache.pkl'), 'wb'))
+        
+        
+base_result = evaluate_rulebook_with_cache(
+    rulebook,
+    X,
+    y,
+    y_votes,
+    cache_dict,
+    trajectories_dict)
+print("Base Rulebook Results:")
+print("Correct:", base_result[0])
+print("Equal:", base_result[1])
+print("Incomparable:", base_result[2])
+print("Total:", base_result[3])
+print("Accuracy:", base_result[4])
+print("Weighted Accuracy:", base_result[5])
+print("Accuracy out of predictions:", base_result[0]/(base_result[3]-base_result[2]) if base_result[3]-base_result[2]>0 else 0.0)
+
+
 #cache_rule_evaluations(rulebook, rule_id_to_params, rule_id_to_values, X, y, cache_dict, trajectories_dict)
 #pickle.dump(cache_dict, open(os.path.join(output_directory, 'tuning_cache.pkl'), 'wb'))
 
@@ -108,76 +131,99 @@ print("Total:", total)
 print("Accuracy:", accuracy)
 print("Weighted Accuracy:", weighted_accuracy) """
 
-# Shuffle df
-df = df.sample(frac=1, random_state=42).reset_index(drop=True)
 
-# Prepare data
-X = df['X'].tolist()
-y = df['y'].tolist()
-votes = df['votes'].tolist()
-""" 
-kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-accuracy_list = []
-weighted_accuracy_list = []
-correct_list = []
-for train_index, test_index in kf.split(X):
-    X_train = [X[i] for i in train_index]
-    y_train = [y[i] for i in train_index]
-    votes_train = [votes[i] for i in train_index]
+for run in range(NUM_RUNS):
+    # Shuffle df
+    df = df.sample(frac=1, random_state=SEED).reset_index(drop=True)
 
-    X_test = [X[i] for i in test_index]
-    y_test = [y[i] for i in test_index]
-    votes_test = [votes[i] for i in test_index]
+    # Prepare data
+    X = df['X'].tolist()
+    y = df['y'].tolist()
+    votes = df['votes'].tolist()
 
-    # Further split training into train/validation (15%)
-    val_size = int(0.15 * len(X_train))
-    X_val, y_val, votes_val = X_train[:val_size], y_train[:val_size], votes_train[:val_size]
-    X_train, y_train, votes_train = X_train[val_size:], y_train[val_size:], votes_train[val_size:]
+    kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
 
-    # Optimize rulebook on this fold
-    best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
-        rulebook,
-        training_data=X_train,
-        training_labels=y_train,
-        training_votes=votes_train,
-        validation_data=X_val,
-        validation_labels=y_val,
-        validation_votes=votes_val,
-        rule_id_to_params=rule_id_to_params,
-        rule_id_to_values=rule_id_to_values,
-        trajectories_dict=trajectories_dict,
-        rule_parameter_result_dict=cache_dict
-    )
+    accuracy_list = []
+    weighted_accuracy_list = []
+    correct_list = []
+    fold = 0
 
-    # Apply best config to the rulebook
-    for rule_id, params in best_config.items():
-        rule = rule_id_to_rule[rule_id]
-        rule.parameters.update(params)
+    for train_index, test_index in kf.split(X):
+        X_train = [X[i] for i in train_index]
+        y_train = [y[i] for i in train_index]
+        votes_train = [votes[i] for i in train_index]
 
-    # Evaluate on test fold
-    correct, equal, incomparable, total, accuracy, weighted_accuracy = evaluate_rulebook_with_cache(
-        rulebook,
-        X_test,
-        y_test,
-        votes_test,
-        cache_dict,
-        trajectories_dict
-    )
+        X_test = [X[i] for i in test_index]
+        y_test = [y[i] for i in test_index]
+        votes_test = [votes[i] for i in test_index]
 
-    correct_list.append(correct)
-    accuracy_list.append(accuracy)
-    weighted_accuracy_list.append(weighted_accuracy)
+        # Further split training into train/validation (15%)
+        val_size = int(0.15 * len(X_train))
+        X_val, y_val, votes_val = X_train[:val_size], y_train[:val_size], votes_train[:val_size]
+        X_train, y_train, votes_train = X_train[val_size:], y_train[val_size:], votes_train[val_size:]
 
-# Report averaged results
-avg_correct = np.mean(correct_list)
-avg_accuracy = np.mean(accuracy_list)
-avg_weighted_accuracy = np.mean(weighted_accuracy_list)
+        # Optimize rulebook on this fold
+        best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
+            rulebook,
+            training_data=X_train,
+            training_labels=y_train,
+            training_votes=votes_train,
+            validation_data=X_val,
+            validation_labels=y_val,
+            validation_votes=votes_val,
+            rule_id_to_params=rule_id_to_params,
+            rule_id_to_values=rule_id_to_values,
+            trajectories_dict=trajectories_dict,
+            rule_parameter_result_dict=cache_dict
+        )
+        
+        # load config
+        
+        #best_config = pickle.load(open(os.path.join(output_directory, f'best_config_run_{run}_fold_{fold}.pkl'), 'rb'))
 
-print("5-Fold Cross-Validation Results:")
-print("Average Correct:", avg_correct)
-print("Average Accuracy:", avg_accuracy)
-print("Average Weighted Accuracy:", avg_weighted_accuracy) """
+        # Apply best config to the rulebook
+        #for rule_id, params in best_config.items():
+        #    rule = rule_id_to_rule[rule_id]
+        #    rule.parameters.update(params)
+        
+        #Save best config for this fold to a file
+        with open(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'wb') as f:
+            pickle.dump(best_config, f)
+        
+        
+
+        # Evaluate on test fold
+        correct, equal, incomparable, total, accuracy, weighted_accuracy, reasons, predictions = evaluate_rulebook_with_cache(
+            rulebook,
+            X_test,
+            y_test,
+            votes_test,
+            cache_dict,
+            trajectories_dict
+        )
+
+        correct_list.append(correct)
+        accuracy_list.append(accuracy)
+        weighted_accuracy_list.append(weighted_accuracy)
+        fold += 1
+    # Report averaged results
+    avg_correct = np.mean(correct_list)
+    avg_accuracy = np.mean(accuracy_list)
+    std_dev_accuracy = np.std(accuracy_list)
+    avg_weighted_accuracy = np.mean(weighted_accuracy_list)
+    std_dev_weighted_accuracy = np.std(weighted_accuracy_list)
+
+
+    print(f"5-Fold Cross-Validation Results for run {run}, seed {SEED}:")
+    print("Average Correct:", avg_correct)
+    print("Average Accuracy:", avg_accuracy)
+    print("Average Weighted Accuracy:", avg_weighted_accuracy)
+    print("Std Dev Accuracy:", std_dev_accuracy)
+    print("Std Dev Weighted Accuracy:", std_dev_weighted_accuracy)
+    
+    SEED += 1
+
 
 #num_rulebooks, correct, accuracy, unsatisfiable_samples = number_of_unique_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict, seed = 43)
 
@@ -203,6 +249,11 @@ print("Best Score after Simulated Annealing with Validation:", best_score)
 print("Best Validation Score after Simulated Annealing with Validation:", best_val_score) """
 
 
+
+
+
+'''
+
 rulebooks, num_unique_rulebooks, correct, accuracy = find_scenario_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict)
 
 print("Number of Unique Rulebooks across scenarios:", num_unique_rulebooks)
@@ -214,3 +265,6 @@ for name, rb in rulebooks.items():
     print(f"Plotting priority graph for scenario: {name}")
     plot_two_rulebooks_side_by_side(rulebook.in_place_priority_graph, rb.in_place_priority_graph)
     break  # plot only one
+
+
+'''

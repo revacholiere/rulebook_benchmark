@@ -11,7 +11,7 @@ class InPlaceRulebook:
         self.rule_id_to_rule = rule_id_to_rule
         self.rule_ids = list(priority_graph.nodes)
         for node in priority_graph.nodes(data=True):
-            self.in_place_priority_graph.add_node(node[0], rules=self.rule_id_to_rule[node[0]])
+            self.in_place_priority_graph.add_node(node[0], rule=self.rule_id_to_rule[node[0]])
             #self.in_place_priority_graph.add_node(node[0], rules=node)
         for edge in priority_graph.edges(data=True):
             self.in_place_priority_graph.add_edge(edge[0], edge[1])

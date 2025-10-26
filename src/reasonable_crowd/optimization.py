@@ -4,7 +4,8 @@ import networkx as nx
 from tqdm import tqdm
 import random
 import math
-
+from collections import defaultdict
+import numpy as np
 
 def cache_rule_evaluations(
     rbook,
@@ -187,7 +188,7 @@ def optimize_rulebook_grid_bruteforce_with_validation(rulebook, training_data, t
             best_score = score
             best_val_score = val_score
             best_config = trial_config
-            iterator.set_description(f"New best: Train {best_score:.4f}, Val {best_val_score:.4f}")
+            iterator.set_description(f"New best: Train {best_score/len(training_data):.4f}, Val {best_val_score/len(validation_data):.4f}")
 
     return best_config, best_score, best_val_score
 
@@ -207,6 +208,9 @@ def no_redundant_edges(graph):
             if len(list(nx.all_simple_paths(graph, n, s))) > 1:
                 return False
     return True
+
+def is_weakly_connected(graph):
+    return nx.is_weakly_connected(graph)
                 
 
 def random_action(rulebook, max_attempts=10):
@@ -221,8 +225,8 @@ def random_action(rulebook, max_attempts=10):
         g = new_rulebook.in_place_priority_graph
         nodes = list(g.nodes)
         edges = list(g.edges)
-        choices = ["add", "remove", "swap"]
-        #choices = ["swap"]
+        #choices = ["add", "remove", "swap"]
+        choices = ["swap"]
         action_type = random.choice(choices)
 
         if action_type == "add":
@@ -247,7 +251,7 @@ def random_action(rulebook, max_attempts=10):
             continue
 
         # Validate the modified graph
-        if is_acyclic(g) and no_redundant_edges(g):
+        if is_acyclic(g) and no_redundant_edges(g) and is_weakly_connected(g):
             new_rulebook.in_place_priority_graph = g
             return new_rulebook
 
@@ -423,9 +427,7 @@ def number_of_unique_rulebooks(rulebook, train_data, train_labels, train_votes, 
         
     return len(unique_rulebooks), score, score/total, unsatisfiable_samples
 
-
-
-def find_scenario_rulebooks(base_rulebook, all_pairs, all_labels, all_votes, rule_parameter_result_dict, trajectories_dict):
+def get_scenario_to_samples(X, y, y_votes, trajectories_dict):
     scenario_to_samples = {}
 
     for name, trajectory in trajectories_dict.items():
@@ -437,25 +439,29 @@ def find_scenario_rulebooks(base_rulebook, all_pairs, all_labels, all_votes, rul
             scenario_to_samples[scenario_name]['y'] = []
             scenario_to_samples[scenario_name]['votes'] = []
 
-    for i in range(len(all_pairs)):
-        pair = all_pairs[i]
-        label = all_labels[i]
-        votes = all_votes[i]
+    for i in range(len(X)):
+        pair = X[i]
+        label = y[i]
+        votes = y_votes[i]
         parts = pair[0].split('-')
         scenario_name = parts[0]
         scenario_to_samples[scenario_name]['X'].append(pair)
         scenario_to_samples[scenario_name]['y'].append(label)
         scenario_to_samples[scenario_name]['votes'].append(votes)
 
+    return scenario_to_samples
+
+def find_scenario_rulebooks(base_rulebook, all_pairs, all_labels, all_votes, rule_parameter_result_dict, trajectories_dict, seed=42):
+    scenario_to_samples = get_scenario_to_samples(all_pairs, all_labels, all_votes, trajectories_dict)
     rulebooks = {}
     total = 0
     correct = 0
     num_unique_rulebooks = 0
     
     pbar = tqdm(total=len(scenario_to_samples), desc="Finding Rulebooks for Scenarios", leave=False)
-    print("Number of scenarios:", len(scenario_to_samples))
+    #print("Number of scenarios:", len(scenario_to_samples))
     for name, traj_dict in scenario_to_samples.items():
-        rulebook, score = simulated_annealing_small_set(base_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, max_iter=100, start_temp=10.0, alpha=0.995, seed=42)
+        rulebook, score = simulated_annealing_small_set(base_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, max_iter=100, start_temp=10.0, alpha=0.995, seed=seed)
         #print(f"Scenario: {name}, Score: {score}/{len(traj_dict['X'])}")
         traj_dict['rulebook'] = rulebook
         traj_dict['score'] = score/len(traj_dict['X'])
@@ -543,5 +549,190 @@ def random_dag_from_nodes(nodes, seed=None):
 
     return g
         
+
+
+
+def combine_groups_in_order(g, groups):
+    """
+    Combine node groups from a DAG into a new ordered graph.
+    - Keeps in-group edges unchanged.
+    - Connects nodes with no successors in group[i] to nodes with no predecessors in group[i+1].
     
+    Args:
+        g: networkx.DiGraph (must be a DAG)
+        groups: list[list[node_id]] defining the desired group order.
+    
+    Returns:
+        new_g: networkx.DiGraph
+    """
+    new_g = nx.DiGraph()
+    new_g.add_nodes_from(g.nodes())
+
+    # 1. Add all intra-group edges
+    for group in groups:
+        sub_g = g.subgraph(group)
+        new_g.add_edges_from(sub_g.edges())
+
+    # 2. Connect consecutive groups
+    for i in range(len(groups) - 1):
+        current_group = groups[i]
+        next_group = groups[i + 1]
+
+        # terminal nodes = nodes with no successors within current group
+        terminals = [n for n in current_group if not any(s in current_group for s in g.successors(n))]
+
+        # entry nodes = nodes with no predecessors within next group
+        entries = [n for n in next_group if not any(p in next_group for p in g.predecessors(n))]
+
+        # connect all terminal → entry pairs
+        for u in terminals:
+            for v in entries:
+                new_g.add_edge(u, v)
+
+    # 3. Validate
+    assert nx.is_directed_acyclic_graph(new_g), "Resulting graph is not acyclic"
+
+    return new_g
+
+def group_rulebook(rulebook, groups):
+    rb = rulebook.copy()
+    rb.in_place_priority_graph = combine_groups_in_order(rulebook.in_place_priority_graph, groups)
+    return rb
+
+
+def group_nodes_by_level(g):
+    """
+    Group nodes of a DAG by their topological levels.
+    Level 0: nodes with no predecessors.
+    Level 1: nodes whose predecessors are all in level 0.
+    And so on.
+
+    Args:
+        g: networkx.DiGraph (must be a DAG)
+
+    Returns:
+        levels: list[list[node_id]] where levels[i] contains nodes at level i.
+    """
+    if not nx.is_directed_acyclic_graph(g):
+        raise ValueError("Input graph must be a DAG")
+
+    in_degree = {n: d for n, d in g.in_degree()}
+    levels = []
+    current_level = [n for n, d in in_degree.items() if d == 0]
+
+    while current_level:
+        levels.append(current_level)
+        next_level = []
+        for n in current_level:
+            for succ in g.successors(n):
+                in_degree[succ] -= 1
+                if in_degree[succ] == 0:
+                    next_level.append(succ)
+        current_level = next_level
+
+    return levels
+
+
+
+def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None):
+    """
+    Greedily swap rulebook levels in the graph. Always choose the maximum improving move.
+    Stops when no move can improve the score.
+    """
+
+    rb = rulebook.copy()
+    g = rb.in_place_priority_graph
+    if levels is None:
+        levels = group_nodes_by_level(g)
+    improved = True
+    
+    while improved:
+        improved = False
+        best_score = evaluate_rulebook_with_cache(rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
+        best_rb = rb.copy()
+
+        for i in range(len(levels)):
+            for j in range(i + 1, len(levels)):
+                # Swap levels i and j
+                new_levels = levels[:]
+                new_levels[i], new_levels[j] = new_levels[j], new_levels[i]
+                new_g = combine_groups_in_order(g, new_levels)
+                new_rb = rb.copy()
+                new_rb.in_place_priority_graph = new_g
+
+                new_score = evaluate_rulebook_with_cache(new_rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
+
+                if new_score > best_score:
+                    best_score = new_score
+                    best_rb = new_rb
+                    improved = True
+
+        rb = best_rb
+
+    
+    return rb, best_score
+
+
+def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None):
+    """
+    Try all permutations of rulebook levels in the graph. Choose the best one.
+    """
+
+    rb = rulebook.copy()
+    g = rb.in_place_priority_graph
+    if levels is None:
+        levels = group_nodes_by_level(g)
+    
+    best_score = evaluate_rulebook_with_cache(rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
+    best_rb = rb.copy()
+
+    for perm in itertools.permutations(levels):
+        new_g = combine_groups_in_order(g, perm)
+        new_rb = rb.copy()
+        new_rb.in_place_priority_graph = new_g
+
+        new_score = evaluate_rulebook_with_cache(new_rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
+
+        if new_score > best_score:
+            best_score = new_score
+            best_rb = new_rb
+
+    return best_rb, best_score
+
+
+def find_scenario_groups(rulebook, X, y, y_votes, rule_parameter_result_dict, trajectories_dict, optimization_alg, groups=None):
+    scenario_to_samples = get_scenario_to_samples(X, y, y_votes, trajectories_dict)
+    total = 0
+    correct = 0
+    rulebooks = {}
+    num_unique_rulebooks = 0
+    scenario_to_groups = {}
+    if groups is None:
+        groups = group_nodes_by_level(rulebook.in_place_priority_graph)
+    grouped_rulebook = group_rulebook(rulebook, groups)
+
+    pbar = tqdm(total=len(scenario_to_samples), desc="Finding Groups for Scenarios", leave=False)
+    for name, traj_dict in scenario_to_samples.items():
+        rulebook, score = optimization_alg(grouped_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, levels=groups)
+        traj_dict['rulebook'] = rulebook
+        traj_dict['score'] = score/len(traj_dict['X'])
+        total += len(traj_dict['X'])
+        correct += score
+        scenario_to_groups[name] = groups
+
+        found = False
+        for existing_rb in rulebooks.values():
+            if nx.utils.graphs_equal(existing_rb.in_place_priority_graph, rulebook.in_place_priority_graph):
+                found = True
+                rulebooks[name] = existing_rb
+                break
+        if not found:
+            rulebooks[name] = rulebook
+            num_unique_rulebooks += 1
+        
+        pbar.update(1)
+    pbar.close()
+
+
+    return rulebooks, num_unique_rulebooks, correct, correct/total, scenario_to_samples
 
