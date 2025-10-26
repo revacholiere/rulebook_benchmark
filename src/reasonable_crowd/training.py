@@ -183,9 +183,9 @@ for run in range(NUM_RUNS):
         #best_config = pickle.load(open(os.path.join(output_directory, f'best_config_run_{run}_fold_{fold}.pkl'), 'rb'))
 
         # Apply best config to the rulebook
-        #for rule_id, params in best_config.items():
-        #    rule = rule_id_to_rule[rule_id]
-        #    rule.parameters.update(params)
+        for rule_id, params in best_config.items():
+            rule = rule_id_to_rule[rule_id]
+            rule.parameters.update(params)
         
         #Save best config for this fold to a file
         with open(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'wb') as f:
