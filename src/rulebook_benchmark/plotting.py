@@ -3,12 +3,11 @@ from matplotlib.patches import Polygon
 from matplotlib import animation
 import numpy as np
 
-
 def animate_realization(realization, dpi=100, interval=100, margin=50):
     fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
 
     colors = {"Car": "blue", "Truck": "purple", "Pedestrian": "orange", "Bicycle": "green"}
-    patches, arrows, texts = [], [], []
+    patches = []
     dummy = np.zeros((3, 2))
 
     # Lane base layer
@@ -17,18 +16,21 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
                        facecolor="lightgray", edgecolor="black", alpha=0.5)
         ax.add_patch(poly)
 
+    # Ego lane highlight
     ego_lane_patch = Polygon(dummy, closed=True, facecolor="yellow", alpha=0.3)
     ax.add_patch(ego_lane_patch)
 
+    # Object patches
     for obj in realization.objects:
-        facecolor = "red" if obj is realization.ego else colors.get(obj.object_type, "gray")
-        poly = Polygon(dummy, closed=True, facecolor=facecolor, alpha=0.6)
+        color = "red" if obj is realization.ego else colors.get(obj.object_type, "gray")
+        poly = Polygon(dummy, closed=True, facecolor=color, alpha=0.6)
         ax.add_patch(poly)
         patches.append(poly)
-        arrows.append([ax.arrow(0, 0, 0, 0, head_width=2, head_length=4, fc=facecolor, ec=facecolor)])
-        texts.append(ax.text(0, 0, "", fontsize=8, color=facecolor))
 
+    # Arrows only for ego
+    ego_arrow = [ax.arrow(0, 0, 0, 0, head_width=2, head_length=4, fc="red", ec="red")]
     lane_arrow = [ax.arrow(0, 0, 0, 0, head_width=2, head_length=4, fc="yellow", ec="yellow")]
+    text = ax.text(0, 0, "", fontsize=8, color="red")
 
     ax.set_aspect("equal")
     ax.set_xticks([])
@@ -39,12 +41,7 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
         for patch in patches:
             patch.set_xy(dummy)
         ego_lane_patch.set_xy(dummy)
-        for a in arrows:
-            a[0].set_visible(False)
-        for t in texts:
-            t.set_visible(False)
-        lane_arrow[0].set_visible(False)
-        return patches + [ego_lane_patch] + [a[0] for a in arrows] + texts + [lane_arrow[0]]
+        return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], text]
 
     def update(frame):
         ws = realization.get_world_state(min(frame, len(realization) - 1))
@@ -52,39 +49,43 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
         ego_pos = ego.position
         ego_yaw = ego.orientation.yaw
 
+        # Update ego lane highlight
         lane = getattr(ego, "lane", None)
         if lane is not None:
             ego_lane_patch.set_xy(lane.polygon.exterior.coords[:-1])
             lane_yaw = lane.orientation.value(ego_pos)
             lane_arrow[0].remove()
-            lane_dx, lane_dy = 8 * np.cos(lane_yaw), 8 * np.sin(lane_yaw)
-            lane_arrow[0] = ax.arrow(ego_pos[0], ego_pos[1], lane_dx, lane_dy,
+            ldx, ldy = 8 * np.cos(lane_yaw), 8 * np.sin(lane_yaw)
+            lane_arrow[0] = ax.arrow(ego_pos[0], ego_pos[1], ldx, ldy,
                                      head_width=2, head_length=4, fc="yellow", ec="yellow")
         else:
             ego_lane_patch.set_xy(dummy)
             lane_arrow[0].set_visible(False)
 
-        for i, (patch, state) in enumerate(zip(patches, ws.states)):
+        # Update all object polygons
+        for patch, state in zip(patches, ws.states):
             patch.set_xy(state.polygon.exterior.coords[:-1])
-            x, y = state.position
-            yaw = state.orientation.yaw
-            dx, dy = 8 * np.cos(yaw), 8 * np.sin(yaw)
-            arrows[i][0].remove()
-            color = "red" if realization.objects[i] is realization.ego else colors.get(realization.objects[i].object_type, "gray")
-            arrows[i][0] = ax.arrow(x, y, dx, dy, head_width=2, head_length=4, fc=color, ec=color)
-            texts[i].set_text(f"{yaw:.2f} rad")
-            texts[i].set_position((x + dx + 2, y + dy + 2))
-            texts[i].set_color(color)
-            texts[i].set_visible(True)
 
+        # Ego heading arrow
+        ego_arrow[0].remove()
+        dx, dy = 8 * np.cos(ego_yaw), 8 * np.sin(ego_yaw)
+        ego_arrow[0] = ax.arrow(ego_pos[0], ego_pos[1], dx, dy,
+                                head_width=2, head_length=4, fc="red", ec="red")
+
+        # Ego yaw text
+        text.set_text(f"{ego_yaw:.2f} rad")
+        text.set_position((ego_pos[0] + dx + 2, ego_pos[1] + dy + 2))
+
+        # Viewport follows ego
         cx, cy = ego_pos
         ax.set_xlim(cx - margin, cx + margin)
         ax.set_ylim(cy - margin, cy + margin)
-        return patches + [ego_lane_patch] + [a[0] for a in arrows] + texts + [lane_arrow[0]]
+
+        return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], text]
 
     max_frames = len(realization)
-    anim = animation.FuncAnimation(fig, update, frames=max_frames, init_func=init,
-                                   interval=interval, blit=True)
+    anim = animation.FuncAnimation(fig, update, frames=max_frames,
+                                   init_func=init, interval=interval, blit=True)
     return anim
 
 

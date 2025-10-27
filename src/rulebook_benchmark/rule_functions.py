@@ -320,13 +320,11 @@ def vru_clearance(handler, step, on_road, threshold):
     pool = handler(step)
     vru_states = pool.vrus_in_proximity
     violation = 0
+    distance = np.inf
     for vru_state in vru_states:
-        if on_road:
-            if vru_state.lane is not None:
-                distance = pool.distance(vru_state)
-            else:
-                continue
-        else:
+        if on_road and vru_state.lane is not None:
+            distance = pool.distance(vru_state)
+        elif not on_road and vru_state.lane is None:
             distance = pool.distance(vru_state)
 
         violation = max(violation, threshold - distance)

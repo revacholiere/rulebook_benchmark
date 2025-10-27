@@ -30,7 +30,11 @@ def firstPass(obj, str_tree, lanes):  # process the states where the lane is not
     return ambiguous_lanes
 
 
-def secondPass(obj, ambiguous_lanes, network):
+def secondPass(obj, ambiguous_lanes, network, isScenic=False):
+    if isScenic:
+        rot = np.pi/2
+    else:
+        rot = 0
     for step, lanes in ambiguous_lanes.items():
         pos = obj.get_state(step).position
 
@@ -111,7 +115,7 @@ def secondPass(obj, ambiguous_lanes, network):
             obj_orientation = obj.get_state(step).orientation.yaw
             obj_orientation = obj_orientation % (2 * np.pi)
             for lane in last_resort:  # workaround for when no candidate lanes are found
-                lane_orientation = lane.orientation.value(obj.get_state(step).position)
+                lane_orientation = lane.orientation.value(obj.get_state(step).position) + rot
                 lane_orientation = lane_orientation % (2 * np.pi)
                 angles.append(
                     abs(normalize_angle(lane_orientation - obj_orientation))
@@ -122,7 +126,7 @@ def secondPass(obj, ambiguous_lanes, network):
                 
             
         else:
-            print("this should not happen: secondPass no intersection found", step)
+            #print("this should not happen: secondPass no intersection found", step)
             prev_lane = obj.get_state(step - 1).lane if step > 0 else None
             if prev_lane is not None:
                 for lane in lanes:
@@ -134,7 +138,7 @@ def secondPass(obj, ambiguous_lanes, network):
             else:
                 angles = []
                 for lane in lanes:
-                    lane_orientation = lane.orientation.value(obj.get_state(step).position) % (2 * np.pi)
+                    lane_orientation = lane.orientation.value(obj.get_state(step).position) % (2 * np.pi) + rot
                     obj_orientation = obj.get_state(step).orientation.yaw % (2 * np.pi)
                     # ensure both angles are in the range [0, 2*pi)
                     lane_orientation = lane_orientation % (2 * np.pi)
@@ -151,7 +155,7 @@ def secondPass(obj, ambiguous_lanes, network):
 
 
 def process_trajectory(
-    realization,
+    realization, isScenic=False
 ):  # given a realization, extract the sequence of lanes followed by each vehicle
     network = realization.network
     objects = realization.objects
@@ -164,7 +168,7 @@ def process_trajectory(
     for obj in objects:
         ambiguous_lanes = firstPass(obj, strtree, lanes)
         if len(ambiguous_lanes) > 0:
-            secondPass(obj, ambiguous_lanes, network)
+            secondPass(obj, ambiguous_lanes, network, isScenic=isScenic)
 
         # print(f"Object {obj.object_type} {obj.mesh} has trajectory: {[state.lane for state in obj.trajectory]}")
 
@@ -172,7 +176,7 @@ def process_trajectory(
 
 def get_possible_lanes(state, tree, lanes):
     point = shapely.Point(state.position)
-    indices = tree.query(point, predicate="intersects")
+    indices = tree.query(point, predicate="intersects", distance=0.1) # 
     return [lanes[ind] for ind in indices]
 
 
