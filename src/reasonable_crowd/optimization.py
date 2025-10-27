@@ -552,7 +552,7 @@ def random_dag_from_nodes(nodes, seed=None):
 
 
 
-def combine_groups_in_order(g, groups):
+def combine_groups_in_order(g, groups, keep_relations):
     """
     Combine node groups from a DAG into a new ordered graph.
     - Keeps in-group edges unchanged.
@@ -568,10 +568,16 @@ def combine_groups_in_order(g, groups):
     new_g = nx.DiGraph()
     new_g.add_nodes_from(g.nodes())
 
-    # 1. Add all intra-group edges
-    for group in groups:
-        sub_g = g.subgraph(group)
-        new_g.add_edges_from(sub_g.edges())
+    # 1. Add intra-group edges
+    reach = nx.transitive_closure_dag(g)
+    if keep_relations:
+        for group in groups:
+            for u, v in itertools.permutations(group, 2):
+                if reach.has_edge(u, v):
+                    new_g.add_edge(u, v)
+
+        # Remove redundant edges
+        new_g = nx.transitive_reduction(new_g)
 
     # 2. Connect consecutive groups
     for i in range(len(groups) - 1):
@@ -579,10 +585,10 @@ def combine_groups_in_order(g, groups):
         next_group = groups[i + 1]
 
         # terminal nodes = nodes with no successors within current group
-        terminals = [n for n in current_group if not any(s in current_group for s in g.successors(n))]
+        terminals = [n for n in current_group if not any(s in current_group for s in new_g.successors(n))]
 
         # entry nodes = nodes with no predecessors within next group
-        entries = [n for n in next_group if not any(p in next_group for p in g.predecessors(n))]
+        entries = [n for n in next_group if not any(p in next_group for p in new_g.predecessors(n))]
 
         # connect all terminal → entry pairs
         for u in terminals:
@@ -594,9 +600,9 @@ def combine_groups_in_order(g, groups):
 
     return new_g
 
-def group_rulebook(rulebook, groups):
+def group_rulebook(rulebook, groups, keep_relations):
     rb = rulebook.copy()
-    rb.in_place_priority_graph = combine_groups_in_order(rulebook.in_place_priority_graph, groups)
+    rb.in_place_priority_graph = combine_groups_in_order(rulebook.in_place_priority_graph, groups, keep_relations)
     return rb
 
 
@@ -634,7 +640,7 @@ def group_nodes_by_level(g):
 
 
 
-def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None):
+def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None, max_iters=100, keep_relations=True, restricted=False):
     """
     Greedily swap rulebook levels in the graph. Always choose the maximum improving move.
     Stops when no move can improve the score.
@@ -645,35 +651,54 @@ def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_
     if levels is None:
         levels = group_nodes_by_level(g)
     improved = True
-    
-    while improved:
+    iter_count = 0
+    while improved and iter_count < max_iters:
         improved = False
         best_score = evaluate_rulebook_with_cache(rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
         best_rb = rb.copy()
 
-        for i in range(len(levels)):
-            for j in range(i + 1, len(levels)):
-                # Swap levels i and j
+
+        if restricted:
+            for i in range(len(levels) - 1, 0, -1):
+                # swap levels i and i+1
                 new_levels = levels[:]
-                new_levels[i], new_levels[j] = new_levels[j], new_levels[i]
-                new_g = combine_groups_in_order(g, new_levels)
+                new_levels[i], new_levels[i - 1] = new_levels[i - 1], new_levels[i]
+                new_g = combine_groups_in_order(g, new_levels, keep_relations)
                 new_rb = rb.copy()
                 new_rb.in_place_priority_graph = new_g
 
                 new_score = evaluate_rulebook_with_cache(new_rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
-
                 if new_score > best_score:
-                    best_score = new_score
-                    best_rb = new_rb
-                    improved = True
+                        best_score = new_score
+                        best_rb = new_rb
+                        improved = True
 
+        
+        else:
+            for i in range(len(levels) - 1, -1, -1):
+                for j in range(i - 1, -1, -1):
+                    # Swap levels i and j
+                    new_levels = levels[:]
+                    new_levels[i], new_levels[j] = new_levels[j], new_levels[i]
+                    new_g = combine_groups_in_order(g, new_levels, keep_relations)
+                    new_rb = rb.copy()
+                    new_rb.in_place_priority_graph = new_g
+
+                    new_score = evaluate_rulebook_with_cache(new_rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
+                    if new_score > best_score:
+                        best_score = new_score
+                        best_rb = new_rb
+                        improved = True
         rb = best_rb
+        g = best_rb.in_place_priority_graph
+        levels = group_nodes_by_level(g)
+                    
+        iter_count += 1
 
-    
     return rb, best_score
 
 
-def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None):
+def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None, keep_relations=True):
     """
     Try all permutations of rulebook levels in the graph. Choose the best one.
     """
@@ -687,7 +712,7 @@ def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajecto
     best_rb = rb.copy()
 
     for perm in itertools.permutations(levels):
-        new_g = combine_groups_in_order(g, perm)
+        new_g = combine_groups_in_order(g, perm, keep_relations)
         new_rb = rb.copy()
         new_rb.in_place_priority_graph = new_g
 
@@ -700,7 +725,7 @@ def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajecto
     return best_rb, best_score
 
 
-def find_scenario_groups(rulebook, X, y, y_votes, rule_parameter_result_dict, trajectories_dict, optimization_alg, groups=None):
+def find_scenario_groups(rulebook, X, y, y_votes, rule_parameter_result_dict, trajectories_dict, optimization_alg, groups=None, keep_relations=True, **kwargs):
     scenario_to_samples = get_scenario_to_samples(X, y, y_votes, trajectories_dict)
     total = 0
     correct = 0
@@ -709,11 +734,11 @@ def find_scenario_groups(rulebook, X, y, y_votes, rule_parameter_result_dict, tr
     scenario_to_groups = {}
     if groups is None:
         groups = group_nodes_by_level(rulebook.in_place_priority_graph)
-    grouped_rulebook = group_rulebook(rulebook, groups)
+    grouped_rulebook = group_rulebook(rulebook, groups, keep_relations)
 
     pbar = tqdm(total=len(scenario_to_samples), desc="Finding Groups for Scenarios", leave=False)
     for name, traj_dict in scenario_to_samples.items():
-        rulebook, score = optimization_alg(grouped_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, levels=groups)
+        rulebook, score = optimization_alg(grouped_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, levels=groups, keep_relations=keep_relations, **kwargs)
         traj_dict['rulebook'] = rulebook
         traj_dict['score'] = score/len(traj_dict['X'])
         total += len(traj_dict['X'])
