@@ -18,7 +18,7 @@ from sklearn.model_selection import KFold
 from reasonable_crowd.visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
 
 SEED = 42
-NUM_RUNS = 5
+NUM_RUNS = 3
 
 
 path_to_reasonable_crowd = "../../../Reasonable-Crowd"
@@ -164,7 +164,7 @@ for run in range(NUM_RUNS):
         X_train, y_train, votes_train = X_train[val_size:], y_train[val_size:], votes_train[val_size:]
 
         # Optimize rulebook on this fold
-        best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
+        """ best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
             rulebook,
             training_data=X_train,
             training_labels=y_train,
@@ -176,11 +176,11 @@ for run in range(NUM_RUNS):
             rule_id_to_values=rule_id_to_values,
             trajectories_dict=trajectories_dict,
             rule_parameter_result_dict=cache_dict
-        )
+        ) """
         
         # load config
-        
-        #best_config = pickle.load(open(os.path.join(output_directory, f'best_config_run_{run}_fold_{fold}.pkl'), 'rb'))
+
+        best_config = pickle.load(open(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'rb'))
 
         # Apply best config to the rulebook
         for rule_id, params in best_config.items():
