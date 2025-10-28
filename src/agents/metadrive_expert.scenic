@@ -7,6 +7,7 @@ TRAJECTORY = [None]
 class MetaDrivePPOPolicyCar(Car):
     actor: None
     controller: None
+    switched: False
 
     def update_actor(self):
         self.actor = METADRIVE_ACTOR[-1]
@@ -29,6 +30,7 @@ behavior MetaDrivePPOFollowLaneBehavior():
         next_lane = current_lane.successor
         egoTrajectory = [current_lane, next_lane]
         TRAJECTORY.append(egoTrajectory)
+        action = MetaDrivePolicyAction(reset_idx=True)
         take action
 
 monitor MetaDrivePPOUpdateState():
