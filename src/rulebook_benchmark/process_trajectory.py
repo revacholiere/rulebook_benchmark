@@ -2,7 +2,7 @@ import shapely
 import numpy as np
 from shapely.strtree import STRtree
 from rulebook_benchmark.utils import angle_between, normalize_angle
-
+import math
     
 
 
@@ -28,6 +28,42 @@ def firstPass(obj, str_tree, lanes):  # process the states where the lane is not
 
     #print(len(ambiguous_lanes), "states with ambiguous lanes")
     return ambiguous_lanes
+
+
+def get_closest_orientation_lane(state, lanes, isScenic=False):
+    rot = 0
+    if isScenic:
+        rot = np.pi/2
+    
+    orientation = state.orientation.yaw
+    pos = state.position
+    similarities = []
+    for lane in lanes:
+        lane_orientation = lane.orientation.value(pos) + rot
+        similarities.append(math.cos(lane_orientation - orientation))
+
+    max_idx = similarities.index(max(similarities))
+    return lanes[max_idx]
+
+
+def get_most_recent_lane(obj, step):
+    for i in range(step - 1, -1, -1):
+        lane = obj.get_state(i).lane
+        if lane is not None:
+            return lane
+    return None
+
+
+def get_next_lane(obj, step):
+    for i in range(step + 1, len(obj.trajectory)):
+        lane = obj.get_state(i).lane
+        if lane is not None:
+            return lane
+    return None
+
+
+
+
 
 
 def secondPass(obj, ambiguous_lanes, network, isScenic=False):
@@ -174,11 +210,8 @@ def process_trajectory(
 
 
 
-def get_possible_lanes(state, tree, lanes):
-    point = shapely.Point(state.position)
-    #indices = tree.query(state.polygon, predicate="intersects") 
-    indices = tree.query(point, predicate="intersects")
-    
+def get_possible_lanes(shapely_obj, tree, lanes):
+    indices = tree.query(shapely_obj, predicate="intersects")
     return [lanes[ind] for ind in indices]
 
 

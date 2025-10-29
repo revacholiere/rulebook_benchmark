@@ -24,7 +24,7 @@ monitor bench():
             obj = realization.objects[i]
             object = objects[i]
             yaw = object.orientation.yaw + np.pi / 2
-            yaw = ((yaw + np.pi/2) % np.pi) - np.pi/2
+            yaw = (yaw + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
             orient = Orientation.fromEuler(yaw, object.orientation.pitch, object.orientation.roll)
             obj.trajectory.append(State(obj, np.array([object.position.x, object.position.y]), np.array([object.velocity.x, object.velocity.y]), orient, step))
         step += 1
