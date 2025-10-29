@@ -10,7 +10,7 @@ from rulebook_benchmark.rulebook import Rulebook
 from reasonable_crowd.InPlaceRulebook import InPlaceRulebook
 import numpy as np
 import pandas as pd
-from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation, number_of_unique_rulebooks, find_scenario_rulebooks
+from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation, number_of_unique_rulebooks, find_scenario_rulebooks, group_rulebook
 import pickle
 from sklearn.model_selection import train_test_split
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
@@ -67,7 +67,13 @@ else:
     cache_rule_evaluations(rulebook, rule_id_to_params, rule_id_to_values, X, y, cache_dict, trajectories_dict)
     pickle.dump(cache_dict, open(os.path.join(output_directory, 'tuning_cache.pkl'), 'wb'))
         
-        
+
+groups = [[1, 2], [3, 7], [8, 9, 11, 12, 13], [17, 18], [4, 5, 6], [15]]
+name_to_group = {"safety-critical": groups[0], "operation-limit": groups[1], "safety-enhancing": groups[2], "predictability": groups[3], "precautionary": groups[4], "regulatory": groups[5]}
+group_to_name = {tuple(value): key for key, value in name_to_group.items()}
+rulebook = group_rulebook(rulebook, groups, keep_relations=True)
+
+
 base_result = evaluate_rulebook_with_cache(
     rulebook,
     X,
@@ -130,6 +136,8 @@ print("Incomparable:", incomparable)
 print("Total:", total)
 print("Accuracy:", accuracy)
 print("Weighted Accuracy:", weighted_accuracy) """
+
+
 
 
 

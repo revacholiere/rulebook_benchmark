@@ -6,7 +6,7 @@ import numpy as np
 def animate_realization(realization, dpi=100, interval=100, margin=50):
     fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
 
-    colors = {"Car": "blue", "Truck": "purple", "Pedestrian": "orange", "Bicycle": "green"}
+    colors = {"Car": "blue", "Truck": "purple", "Pedestrian": "purple", "Bicycle": "green"}
     patches = []
     dummy = np.zeros((3, 2))
 

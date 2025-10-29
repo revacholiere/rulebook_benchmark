@@ -176,7 +176,9 @@ def process_trajectory(
 
 def get_possible_lanes(state, tree, lanes):
     point = shapely.Point(state.position)
-    indices = tree.query(point, predicate="intersects", distance=0.1) # 
+    #indices = tree.query(state.polygon, predicate="intersects") 
+    indices = tree.query(point, predicate="intersects")
+    
     return [lanes[ind] for ind in indices]
 
 
