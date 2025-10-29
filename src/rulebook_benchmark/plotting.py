@@ -2,11 +2,13 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib import animation
 import numpy as np
+from matplotlib.patches import Circle
 
-def animate_realization(realization, dpi=100, interval=100, margin=50):
+def animate_realization(realization, dpi=100, interval=100, margin=50, buffer=0.5):
     fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
+    
 
-    colors = {"Car": "blue", "Truck": "purple", "Pedestrian": "purple", "Bicycle": "green"}
+    colors = {"Car": "blue", "Truck": "yellow", "Pedestrian": "purple", "Bicycle": "green"}
     patches = []
     dummy = np.zeros((3, 2))
 
@@ -15,6 +17,7 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
         poly = Polygon(lane.polygon.exterior.coords[:-1], closed=True,
                        facecolor="lightgray", edgecolor="black", alpha=0.5)
         ax.add_patch(poly)
+        
 
     # Ego lane highlight
     ego_lane_patch = Polygon(dummy, closed=True, facecolor="yellow", alpha=0.3)
@@ -27,6 +30,9 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
         ax.add_patch(poly)
         patches.append(poly)
 
+    ego_buffer = Circle((0, 0), radius=buffer, facecolor='none', edgecolor='cyan', linestyle='--', linewidth=1)
+    ax.add_patch(ego_buffer)
+    
     # Arrows only for ego
     ego_arrow = [ax.arrow(0, 0, 0, 0, head_width=2, head_length=4, fc="red", ec="red")]
     lane_arrow = [ax.arrow(0, 0, 0, 0, head_width=2, head_length=4, fc="yellow", ec="yellow")]
@@ -48,7 +54,10 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
         ego = ws.ego_state
         ego_pos = ego.position
         ego_yaw = ego.orientation.yaw
-
+        
+        # Ego center buffer
+        ego_buffer.center = ego_pos
+        
         # Update ego lane highlight
         lane = getattr(ego, "lane", None)
         if lane is not None:
@@ -81,7 +90,7 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
         ax.set_xlim(cx - margin, cx + margin)
         ax.set_ylim(cy - margin, cy + margin)
 
-        return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], text]
+        return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], ego_buffer, text]
 
     max_frames = len(realization)
     anim = animation.FuncAnimation(fig, update, frames=max_frames,
@@ -90,9 +99,9 @@ def animate_realization(realization, dpi=100, interval=100, margin=50):
 
 
 def compare_realizations_gif(realization_model_pref, realization_human_pref, reason, agreement,
-                             dpi=100, interval=100, margin=50):
+                             dpi=100, interval=100, margin=50, buffer=0.5):
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), dpi=dpi)
-    colors = {"Car": "blue", "Truck": "purple", "Pedestrian": "orange", "Bicycle": "green"}
+    colors = {"Car": "blue", "Truck": "yellow", "Pedestrian": "purple", "Bicycle": "green"}
     patches1, patches2 = [], []
     dummy = np.zeros((3, 2))
 
@@ -107,6 +116,11 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
     ego_lane_patch2 = Polygon(dummy, closed=True, facecolor="yellow", alpha=0.3)
     axes[0].add_patch(ego_lane_patch1)
     axes[1].add_patch(ego_lane_patch2)
+    
+    ego_buffer_human = Circle((0, 0), radius=buffer, facecolor='none', edgecolor='cyan', linestyle='--', linewidth=1)
+    ego_buffer_model = Circle((0, 0), radius=buffer, facecolor='none', edgecolor='cyan', linestyle='--', linewidth=1)
+    axes[0].add_patch(ego_buffer_human)
+    axes[1].add_patch(ego_buffer_model)
 
     for obj in realization_human_pref.objects:
         color = "red" if obj is realization_human_pref.ego else colors.get(obj.object_type, "gray")
@@ -151,6 +165,7 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
         ego1 = ws1.ego_state
         ego_pos1 = ego1.position
         ego_yaw1 = ego1.orientation.yaw
+        ego_buffer_human.center = ego_pos1
         lane1 = getattr(ego1, "lane", None)
         if lane1 is not None:
             ego_lane_patch1.set_xy(lane1.polygon.exterior.coords[:-1])
@@ -180,6 +195,7 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
         ego2 = ws2.ego_state
         ego_pos2 = ego2.position
         ego_yaw2 = ego2.orientation.yaw
+        ego_buffer_model.center = ego_pos2
         lane2 = getattr(ego2, "lane", None)
         if lane2 is not None:
             ego_lane_patch2.set_xy(lane2.polygon.exterior.coords[:-1])
