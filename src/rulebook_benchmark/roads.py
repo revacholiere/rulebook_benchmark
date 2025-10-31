@@ -47,9 +47,16 @@ class ElementOrientation:
     def _get_centerline_orientation(self, point, epsilon=1e-6):
         centerline = self.element.centerline.lineString
         point = shapely.Point(point)
-        projection = centerline.project(point)
-        previous_point = centerline.interpolate(projection - epsilon)
-        next_point = centerline.interpolate(projection + epsilon)
+        projection = centerline.project(point, normalized=True)
+        if projection <= epsilon:
+            previous_point = centerline.interpolate(0, normalized=True)
+        else:
+            previous_point = centerline.interpolate(projection - epsilon, normalized=True)
+            
+        if projection >= 1 - epsilon:
+            next_point = centerline.interpolate(1, normalized=True)
+        else:
+            next_point = centerline.interpolate(projection + epsilon, normalized=True)
         direction = np.array([next_point.x, next_point.y]) - np.array([previous_point.x, previous_point.y])
         #direction = Vector(next_point.x, next_point.y) - Vector(previous_point.x, previous_point.y)
         zero_radian = np.array([1, 0])  # assuming right is 0 radians

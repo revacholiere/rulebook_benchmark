@@ -84,11 +84,12 @@ class Realization():
 
 
 class RealizationObject():
-    def __init__(self, object_id, dimensions, object_type):
+    def __init__(self, object_id, dimensions, object_type, base_footprint=None):
         self.uid = object_id
         self.dimensions = dimensions
         self.length = dimensions[0]
         self.width = dimensions[1]
+        self.base_footprint = base_footprint
 
         self.object_type = object_type
         self.trajectory = []
@@ -103,6 +104,8 @@ class RealizationObject():
             return self.trajectory[step]
         except IndexError:
             raise Exception(f"Error: Step {step} not found in object trajectory")
+        
+    
         
 
 
@@ -120,40 +123,61 @@ class State():
         self.throttle = throttle
         self.brake = brake
         self.lane = None # to be set in process_trajectory
+        self.correct_lanes = [] # to be set in process_trajectory
+        self.incorrect_lanes = [] # to be set in process_trajectory
         
     @cached_property
     def orientation_trimesh(self):
         return self.orientation._trimeshEulerAngles()
     @cached_property
     def polygon(self):
-        obj_length = self.object.length
-        obj_width = self.object.width
-        cx, cy = self.position
-        yaw = self.orientation.yaw  # radians
+        if self.object.base_footprint is not None:
+            # use base footprint if provided
+            base_footprint = self.object.base_footprint
+        
+            cx, cy = self.position
+            yaw = self.orientation.yaw  # radians
 
-        # Half-dimensions
-        hl = obj_length / 2
-        hw = obj_width / 2
+            # Rotation matrix
+            R = np.array([
+                [np.cos(yaw), -np.sin(yaw)],
+                [np.sin(yaw),  np.cos(yaw)]
+            ])
 
-        # Rectangle corners in local frame (centered at origin, no rotation)
-        local_corners = np.array([
-            [ hl,  hw],
-            [ hl, -hw],
-            [-hl, -hw],
-            [-hl,  hw]
-        ])
+            # Rotate + translate
+            world_corners = (base_footprint @ R.T) + np.array([cx, cy])
 
-        # Rotation matrix
-        R = np.array([
-            [np.cos(yaw), -np.sin(yaw)],
-            [np.sin(yaw),  np.cos(yaw)]
-        ])
+            return shapely.Polygon(world_corners)
+                
+        else:
+            obj_length = self.object.length
+            obj_width = self.object.width
+            cx, cy = self.position
+            yaw = self.orientation.yaw  # radians
 
-        # Rotate + translate
-        world_corners = (local_corners @ R.T) + np.array([cx, cy])
+            # Half-dimensions
+            hl = obj_length / 2
+            hw = obj_width / 2
 
-        return shapely.Polygon(world_corners)
-    
+            # Rectangle corners in local frame (centered at origin, no rotation)
+            local_corners = np.array([
+                [ hl,  hw],
+                [ hl, -hw],
+                [-hl, -hw],
+                [-hl,  hw]
+            ])
+
+            # Rotation matrix
+            R = np.array([
+                [np.cos(yaw), -np.sin(yaw)],
+                [np.sin(yaw),  np.cos(yaw)]
+            ])
+
+            # Rotate + translate
+            world_corners = (local_corners @ R.T) + np.array([cx, cy])
+
+            return shapely.Polygon(world_corners)
+
     
     @cached_property
     def coords_np(self):
@@ -258,11 +282,11 @@ class VariableHandler:
 
             # new collisions
             for uid in colliding - previous_colliding:
-                self._collision_timeline.setdefault(uid, []).append([i, i + 1]) if i == 0 else self._collision_timeline.setdefault(uid, []).append([i - 1, i + 1])
+                self._collision_timeline.setdefault(uid, []).append([i, i])
 
             # ongoing collisions
             for uid in colliding & previous_colliding:
-                self._collision_timeline[uid][-1][1] = i + 1 if i < len(self.realization) - 1 else i
+                self._collision_timeline[uid][-1][1] = i # extend end time
 
             previous_colliding = colliding
 

@@ -10,8 +10,8 @@ import orjson
 
 
 class ReasonableCrowdObject(RealizationObject):
-    def __init__(self, object_id, dimensions, object_type):
-        super().__init__(object_id, dimensions, object_type)
+    def __init__(self, object_id, dimensions, object_type, base_footprint=None):
+        super().__init__(object_id, dimensions, object_type, base_footprint=base_footprint)
         if object_type == "ego" or object_type == "vehicle":
             self.object_type = "Car"
         elif object_type == "pedestrian":
@@ -54,6 +54,20 @@ class ReasonableCrowdTrajectoryParser:
             state_list = list(states.values())
             footprint = state_list[0]['footprint']
             heading = state_list[0]['heading_radians']
+            position = np.array([state_list[0]['x_meters'], state_list[0]['y_meters']])
+            footprint_arr = np.array(footprint)
+            # Translate so position is at origin
+            translated = footprint - position
+
+            # Rotate by negative heading to remove orientation
+            R = np.array([
+                [np.cos(-heading), -np.sin(-heading)],
+                [np.sin(-heading),  np.cos(-heading)]
+            ])
+            base_footprint = translated @ R.T
+                    
+            
+            
             polygon = shapely.Polygon(footprint)
             base_polygon = shapely.affinity.rotate(polygon, -heading, origin=polygon.centroid, use_radians=True)
             width = base_polygon.bounds[3] - base_polygon.bounds[1]
@@ -65,7 +79,7 @@ class ReasonableCrowdTrajectoryParser:
             if obj_id == -1:
                 obj_id = 0
 
-            obj = ReasonableCrowdObject(obj_id, dimensions, object_type)
+            obj = ReasonableCrowdObject(obj_id, dimensions, object_type, base_footprint=base_footprint)
 
             timestamps = np.array([s['timestamp'] for s in state_list])
 

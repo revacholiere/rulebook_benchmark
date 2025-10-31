@@ -139,10 +139,14 @@ class RuleEngine:
         return results
 
 
-def kinetic_energy_loss(ego_velocity_before, ego_velocity_after, adv_velocity_before, adv_velocity_after, ego_mass, adv_mass):
+def kinetic_energy_loss(ego_velocity_before, ego_velocity_after, adv_velocity_before, adv_velocity_after, ego_mass, adv_mass, VRU=False):
     ego_loss = 0.5 * ego_mass * (np.linalg.norm(ego_velocity_before) ** 2 - np.linalg.norm(ego_velocity_after) ** 2)
     adv_loss = 0.5 * adv_mass * (np.linalg.norm(adv_velocity_before) ** 2 - np.linalg.norm(adv_velocity_after) ** 2)
-
+    
+    if VRU:
+        # If VRU is involved, we check how much kinetic energy the ego lost, and how much the VRU gained
+        adv_loss = -adv_loss
+        
     return ego_loss + adv_loss
 
 def momentum_loss(ego_velocity_before, ego_velocity_after, adv_velocity_before, adv_velocity_after, ego_mass, adv_mass):
@@ -151,7 +155,7 @@ def momentum_loss(ego_velocity_before, ego_velocity_after, adv_velocity_before, 
 
     return ego_momentum_loss + adv_momentum_loss
 
-def generalized_collision(handler, collision_timeline, states, step, ego_mass, adv_mass, momentum):
+def generalized_collision(handler, collision_timeline, states, step, ego_mass, adv_mass, momentum, epsilon=1e-6, VRU=False):
     violation = 0
     for state in states:
         uid = state.uid
@@ -159,18 +163,21 @@ def generalized_collision(handler, collision_timeline, states, step, ego_mass, a
             continue
         collisions = collision_timeline[uid]
         for collision in collisions:
-            before_collision, after_collision = collision
-
+            collision_start, collision_end = collision
+            if collision_start == 0:
+                before_collision = collision_start
+            else:
+                before_collision = collision_start - 1
             if before_collision > step:
                 break
             elif before_collision < step:
                 continue
             else:
                 prev_state = handler(before_collision).ego_state
-                after_state = handler(after_collision).ego_state
+                after_state = handler(collision_end).ego_state
 
                 adv_prev_state = handler(before_collision).world_state[uid]
-                adv_after_state = handler(after_collision).world_state[uid]
+                adv_after_state = handler(collision_end).world_state[uid]
 
                 if momentum:
                     curr_violation = max(0, momentum_loss(
@@ -189,9 +196,11 @@ def generalized_collision(handler, collision_timeline, states, step, ego_mass, a
                         adv_velocity_before=adv_prev_state.velocity,
                         adv_velocity_after=adv_after_state.velocity,
                         ego_mass=ego_mass,
-                        adv_mass=adv_mass
+                        adv_mass=adv_mass,
+                        VRU=VRU
                     ))
 
+                curr_violation = max(curr_violation, epsilon) # ensure non-zero violation for any collision
                 violation += curr_violation
 
     return violation
@@ -199,7 +208,7 @@ def generalized_collision(handler, collision_timeline, states, step, ego_mass, a
 
 def vru_collision(handler, step, car_mass=1500, vru_mass=70, momentum = False):
     vru_states = handler(step).vrus_in_proximity
-    return generalized_collision(handler, handler.collision_timeline, vru_states, step, car_mass, vru_mass, momentum)
+    return generalized_collision(handler, handler.collision_timeline, vru_states, step, car_mass, vru_mass, momentum, VRU=True)
 
 
 def vehicle_collision(handler, step, car_mass=1500, momentum = False):
@@ -367,24 +376,30 @@ def vru_acknowledgement(handler, step, threshold = 0, timesteps = 20, velocity =
 f5 = Rule(vru_acknowledgement, max, threshold = -1, timesteps = 30, velocity = 4)
 # TODO: vehicle yielding rule based on adv vehicle decelerations
 
-def correct_side(handler, step, **kwargs):
+def correct_side(handler, step, relax_at_intersections=False): # use relax_at_intersections if your lane polygons do not cover all correct sides at intersections
     ego_state = handler(step).ego_state
-    lane = ego_state.lane
-    if lane is None:
-        return 0
     
-    rot = 0
-    if handler.isScenic:
-        rot = np.pi/2
+    correct_area = shapely.Polygon()
+    incorrect_area = shapely.Polygon()
     
-    ego_orientation = ego_state.orientation.yaw
-    lane_orientation = lane.orientation.value(ego_state.position) + rot
+    for lane in ego_state.correct_lanes:
+        lane_polygon = lane.polygon
+        if handler.realization.network.intersectionAt(ego_state.position) is not None and relax_at_intersections:
+            #lane_polygon = lane.polygon.buffer(0.8)  # allow some buffer at intersections
+            return 0 # if at intersection, touching correct lane is enough
+        correct_area = correct_area.union(lane_polygon)
 
-    if math.cos(lane_orientation - ego_orientation) < 0:
-        return 1
-    return 0
+    for lane in ego_state.incorrect_lanes:
+        incorrect_area = incorrect_area.union(lane.polygon)
+    
+    pure_incorrect_area = incorrect_area.difference(correct_area)
+    ego_polygon = ego_state.polygon
+    
+    ego_violation_area = ego_polygon.intersection(pure_incorrect_area).area
 
-f7 = Rule(correct_side, sum)
+    return ego_violation_area
+
+f7 = Rule(correct_side, sum, relax_at_intersections=True)
 
 def speed_limit(handler, step, threshold=15): # speed limit
     ego_state = handler(step).ego_state

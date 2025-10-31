@@ -661,7 +661,7 @@ def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_
         if restricted:
             for i in range(len(levels) - 1, 0, -1):
                 # swap levels i and i+1
-                new_levels = levels[:]
+                new_levels = levels[:]  # make a copy
                 new_levels[i], new_levels[i - 1] = new_levels[i - 1], new_levels[i]
                 new_g = combine_groups_in_order(g, new_levels, keep_relations)
                 new_rb = rb.copy()

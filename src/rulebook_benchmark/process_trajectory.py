@@ -12,12 +12,20 @@ def isObjectInLane(state, lane):  # check if the object's center is in the lane
     return lane_polygon.contains(object_point)
 
 
-def firstPass(obj, str_tree, lanes):  # process the states where the lane is not ambiguous
+def firstPass(obj, str_tree, lanes, isScenic=False):  # process the states where the lane is not ambiguous
     possible_lanes = {}
     ambiguous_lanes = {}
     for i in range(len(obj.trajectory)):
         state = obj.get_state(i)
-        possible_lanes[i] = get_possible_lanes(state, str_tree, lanes)
+        point = shapely.Point(state.position)
+        polygon = state.polygon
+        possible_lanes[i] = get_possible_lanes(point, str_tree, lanes)
+        polygon_intersected_lanes = get_possible_lanes(polygon, str_tree, lanes)
+        correct, incorrect = correct_incorrect_lanes(state, polygon_intersected_lanes, isScenic=isScenic)
+        state.correct_lanes = correct
+        state.incorrect_lanes = incorrect
+        
+        
 
         if len(possible_lanes[i]) == 1:
             obj.trajectory[i].lane = possible_lanes[i][0]
@@ -60,6 +68,25 @@ def get_next_lane(obj, step):
         if lane is not None:
             return lane
     return None
+
+
+def correct_incorrect_lanes(state, lanes, isScenic=False):
+    pos = state.position
+    ego_orientation = state.orientation.yaw
+    rot = 0
+    if isScenic:
+        rot = np.pi/2
+        
+    corrects = []
+    incorrects = []
+    for lane in lanes:
+        lane_orientation = lane.orientation.value(pos) + rot
+        if math.cos(lane_orientation - ego_orientation) > 0:
+            corrects.append(lane)
+        else:
+            incorrects.append(lane)
+
+    return corrects, incorrects
 
 
 
@@ -202,7 +229,7 @@ def process_trajectory(
     polygon_to_lane = dict(zip(lane_polygons, lanes))
 
     for obj in objects:
-        ambiguous_lanes = firstPass(obj, strtree, lanes)
+        ambiguous_lanes = firstPass(obj, strtree, lanes, isScenic=isScenic)
         if len(ambiguous_lanes) > 0:
             secondPass(obj, ambiguous_lanes, network, isScenic=isScenic)
 
@@ -210,11 +237,8 @@ def process_trajectory(
 
 
 
-def get_possible_lanes(state, tree, lanes):
-    point = state.position
-    point = shapely.Point(point)
-    indices = tree.query(point, predicate="intersects")
-    #indices = tree.query(shapely_obj, predicate="intersects")
+def get_possible_lanes(shapely_obj, tree, lanes):
+    indices = tree.query(shapely_obj, predicate="intersects")
     return [lanes[ind] for ind in indices]
 
 
