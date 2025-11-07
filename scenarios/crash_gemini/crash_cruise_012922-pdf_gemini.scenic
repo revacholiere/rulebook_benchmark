@@ -35,11 +35,11 @@ VEER_TRIGGER_DIST = 5
 CRASH_DIST = 2
 
 EGO_INIT_DIST_TO_INTERSECTION = [15, 25]
-TUNDRA_DIST_AHEAD_OF_EGO = [5, 10]
-CYCLIST1_DIST_BEHIND_TUNDRA = [2, 5]
-CYCLIST2_DIST_BEHIND_CYCLIST1 = [2, 3]
-CYCLIST3_DIST_BEHIND_EGO = [-8, -12] # Negative means behind
-PARKING_VEHICLE_LONG_OFFSET = VerifaiRange(0, 2) # Slightly ahead or at level of C3
+param TUNDRA_DIST_AHEAD_OF_EGO = VerifaiRange(5, 10)
+param CYCLIST1_DIST_BEHIND_TUNDRA = VerifaiRange(2, 5)
+param CYCLIST2_DIST_BEHIND_CYCLIST1 = VerifaiRange(2, 3)
+param CYCLIST3_DIST_BEHIND_EGO = VerifaiRange(-8, -12) # Negative means behind
+param PARKING_VEHICLE_LONG_OFFSET = VerifaiRange(0, 2) # Slightly ahead or at level of C3
 
 TERM_DIST = 70
 TERM_TIME = 30
@@ -98,18 +98,18 @@ egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInit
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
-bikeLane = egoInitLane.slowerLane
-parkingLane = bikeLane.slowerLane
+bikeLane = egoInitLane.section._slowerLane.lane
+parkingLane = bikeLane.section._slowerLane.lane
 
-tundraSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.TUNDRA_DIST_AHEAD_OF_EGO in egoInitLane.centerline
-tundraManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, tundraSpawnPt.lane.maneuvers))
-tundraTrajectory = [tundraSpawnPt.lane, tundraManeuver.connectingLane, tundraManeuver.endLane]
+tundraSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.TUNDRA_DIST_AHEAD_OF_EGO
+tundraManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, egoInitLane.maneuvers))
+tundraTrajectory = [tundraManeuver.startLane, tundraManeuver.connectingLane, tundraManeuver.endLane]
 
-cyclist1SpawnPt = new OrientedPoint following roadDirection from tundraSpawnPt for -globalParameters.CYCLIST1_DIST_BEHIND_TUNDRA in bikeLane.centerline
-cyclist2SpawnPt = new OrientedPoint following roadDirection from cyclist1SpawnPt for -globalParameters.CYCLIST2_DIST_BEHIND_CYCLIST1 in bikeLane.centerline
-cyclist3SpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.CYCLIST3_DIST_BEHIND_EGO in bikeLane.centerline
+cyclist1SpawnPt = new OrientedPoint following roadDirection from tundraSpawnPt for -globalParameters.CYCLIST1_DIST_BEHIND_TUNDRA
+cyclist2SpawnPt = new OrientedPoint following roadDirection from cyclist1SpawnPt for -globalParameters.CYCLIST2_DIST_BEHIND_CYCLIST1
+cyclist3SpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.CYCLIST3_DIST_BEHIND_EGO 
 
-parkingVehicleSpawnPt = new OrientedPoint in parkingLane.centerline following roadDirection from cyclist3SpawnPt for globalParameters.PARKING_VEHICLE_LONG_OFFSET
+parkingVehicleSpawnPt = new OrientedPoint following roadDirection from cyclist3SpawnPt for globalParameters.PARKING_VEHICLE_LONG_OFFSET
 
 #################################
 # SCENARIO SPECIFICATION        #

@@ -33,7 +33,8 @@ behavior EgoBehavior():
     do FollowLaneBehavior(target_speed=globalParameters.EGO_SPEED)
 
 behavior PedestrianBehavior():
-    do SetSpeedAction(0)
+    #do SetSpeedAction(0)
+    wait
 
 #################################
 # SPATIAL RELATIONS             #
@@ -43,7 +44,7 @@ initLane = Uniform(*network.lanes)
 egoSpawnPt = new OrientedPoint in initLane.centerline
 
 pedSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.PED_DISTANCE_AHEAD
-pedSpawnPt = pedSpawnPt.offset by (PED_OFFSET_SIDE, 0)
+pedSpawnPt = pedSpawnPt offset by (PED_OFFSET_SIDE, 0)
 
 #################################
 # SCENARIO SPECIFICATION        #

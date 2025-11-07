@@ -566,6 +566,8 @@ def combine_groups_in_order(g, groups, keep_relations):
         new_g: networkx.DiGraph
     """
     new_g = nx.DiGraph()
+    
+    # also add data from original graph
     new_g.add_nodes_from(g.nodes())
 
     # 1. Add intra-group edges
@@ -578,6 +580,10 @@ def combine_groups_in_order(g, groups, keep_relations):
 
         # Remove redundant edges
         new_g = nx.transitive_reduction(new_g)
+        
+        
+        for n, d in g.nodes(data=True):
+            new_g.nodes[n].update(d)
 
     # 2. Connect consecutive groups
     for i in range(len(groups) - 1):

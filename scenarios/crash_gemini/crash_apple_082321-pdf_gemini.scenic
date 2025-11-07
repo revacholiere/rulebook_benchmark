@@ -27,7 +27,7 @@ TERM_TIME = 10
 param SUBARU_X_OFFSET = VerifaiRange(-5, -3) # X-offset (rearward) from ego's center in its local frame
 param SUBARU_Y_OFFSET = VerifaiRange(2, 4) # Y-offset (leftward) from ego's center in its local frame
 param SUBARU_INIT_ANGLE = VerifaiRange(math.pi/4, math.pi/2) # Initial angle of Subaru relative to ego's heading
-param SUBARU_REVERSE_SPEED = VerifaiRange(-2.0, -0.5) # Speed for Subaru, negative for reversing
+param SUBARU_REVERSE_THROTTLE = VerifaiRange(0.1, 0.3) # Speed for Subaru, negative for reversing
 
 #################################
 # AGENT BEHAVIORS               #
@@ -35,18 +35,19 @@ param SUBARU_REVERSE_SPEED = VerifaiRange(-2.0, -0.5) # Speed for Subaru, negati
 
 behavior AppleBehavior():
     # Apple vehicle is stopped at a stop sign
-    take SetSpeedAction(0)
+    take SetThrottleAction(0)
 
 behavior SubaruBehavior():
     # Subaru reverses out of a parking space
-    take SetSpeedAction(globalParameters.SUBARU_REVERSE_SPEED)
+    take SetReverseAction(True)
+    take SetThrottleAction(globalParameters.SUBARU_REVERSE_THROTTLE)
 
 #################################
 # SPATIAL RELATIONS             #
 #################################
 
 # Find a junction to simulate a stop sign scenario
-intersection = Uniform(*filter(lambda i: i.isJunction, network.intersections))
+intersection = Uniform(*network.intersections)
 
 # Ego (Apple vehicle) is positioned on an incoming lane to the junction
 egoInitLane = Uniform(*intersection.incomingLanes)
@@ -58,8 +59,7 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 # A negative SUBARU_X_OFFSET places the Subaru behind the ego.
 # A positive SUBARU_Y_OFFSET places the Subaru to the left of the ego.
 # SUBARU_INIT_ANGLE provides the diagonal orientation relative to the ego's heading.
-subaruSpawnPt = new OrientedPoint at ego offset by (globalParameters.SUBARU_X_OFFSET, globalParameters.SUBARU_Y_OFFSET), \
-    with heading ego.heading + globalParameters.SUBARU_INIT_ANGLE
+
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -68,6 +68,9 @@ subaruSpawnPt = new OrientedPoint at ego offset by (globalParameters.SUBARU_X_OF
 ego = new Car at egoSpawnPt,
     with blueprint APPLE_MODEL,
     with behavior AppleBehavior()
+
+subaruSpawnPt = new OrientedPoint at ego offset by (globalParameters.SUBARU_X_OFFSET, globalParameters.SUBARU_Y_OFFSET), \
+    with heading ego.heading + globalParameters.SUBARU_INIT_ANGLE
 
 adversary = new Car at subaruSpawnPt,
     with blueprint SUBARU_MODEL,
@@ -91,4 +94,4 @@ require (distance to adversary) > CRASH_DIST
 terminate when (distance to adversary) < CRASH_DIST
 
 # Terminate if the scenario runs for too long
-terminate when current_time > TERM_TIME
+#terminate when current_time > TERM_TIME

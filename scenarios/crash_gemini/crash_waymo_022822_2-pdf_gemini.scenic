@@ -21,56 +21,63 @@ MODEL = "vehicle.toyota.prius"
 PASSENGER_MODEL = 'vehicle.lincoln.mkz_2017'
 PED_MODEL = "vehicle.bh.crossbike"
 
-param WAYMO_SPEED = VerifaiRange(7, 10)
+param WAYMO_SPEED = VerifaiRange(3, 5)
+param WAYMO_TURN_SPEED = VerifaiRange(1, 1.5)
 param WAYMO_BRAKE = VerifaiRange(0.5, 1.0)
+param WAYMO_SLOW_SPEED = VerifaiRange(0.1, 0.3)
 
-param PASSENGER_SPEED = VerifaiRange(7, 10)
-param PASSENGER_DIST_BEHIND = VerifaiRange(-10, -15)
+param PED_YIELD_DIST = VerifaiRange(10, 15)
+param PASSENGER_SPEED = VerifaiRange(6, 8)
+param PASSENGER_DIST_BEHIND = VerifaiRange(-15, -25)
 
 param PED_SPEED = VerifaiRange(1.0, 2.0)
 param PED_CROSS_TIME = VerifaiRange(2, 4)
 
-param SAFETY_DIST = VerifaiRange(8, 12)
+param SAFETY_DIST = VerifaiRange(3, 5)
 CRASH_DIST = 1
 
-INIT_DIST_TO_INTERSECTION = 20
+INIT_DIST_TO_INTERSECTION = [15, 30]
+PED_DIST_TO_INTERSECTION = 5
 TERM_DIST = 50
 
 #################################
 # AGENT BEHAVIORS               #
 #################################
 
+behavior Stop():
+    while True:
+        take SetBrakeAction(1.0)
+        take SetThrottleAction(0.0)
+
 behavior WaymoBehavior(trajectory):
     try:
-        do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_SPEED, trajectory=trajectory)
+        do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_SPEED, turn_speed=globalParameters.WAYMO_TURN_SPEED, trajectory=trajectory) until (distance to pedestrian) < globalParameters.PED_YIELD_DIST
+        do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_SLOW_SPEED, trajectory=trajectory) until (distance to intersection) == 0
+        do Stop()
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.WAYMO_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
 
 behavior PassengerBehavior():
     do FollowLaneBehavior(target_speed=globalParameters.PASSENGER_SPEED)
 
 behavior PedestrianBehavior():
-    do FollowLaneBehavior(target_speed=globalParameters.PED_SPEED, laneToFollow=self.lane) \
-        for globalParameters.PED_CROSS_TIME seconds
-    terminate
-
+    while (distance from self to ego) > globalParameters.PED_YIELD_DIST + 3:
+        wait
+    take SetWalkingSpeedAction(globalParameters.PED_SPEED)
 #################################
 # SPATIAL RELATIONS             #
 #################################
 
 intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
-
-waymoInitLane = Uniform(*filter(lambda l: l.isIncoming, intersection.lanes))
-waymoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, waymoInitLane.maneuvers))
+waymoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, intersection.maneuvers))
+waymoInitLane = waymoManeuver.startLane
 waymoTrajectory = [waymoInitLane, waymoManeuver.connectingLane, waymoManeuver.endLane]
 waymoSpawnPt = new OrientedPoint in waymoInitLane.centerline
 
 passengerSpawnPt = new OrientedPoint following roadDirection from waymoSpawnPt for globalParameters.PASSENGER_DIST_BEHIND
 
-pedCrosswalk = Uniform(*intersection.crosswalks)
-pedSpawnPt = new OrientedPoint in pedCrosswalk.centerline
+pedLane = waymoManeuver.endLane
+pedSidewalk = pedLane.group.sidewalk
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -84,18 +91,16 @@ adversary = new Car at passengerSpawnPt,
     with blueprint PASSENGER_MODEL,
     with behavior PassengerBehavior()
 
-pedestrian = new Vehicle at pedSpawnPt,
+pedestrian = new Pedestrian in pedSidewalk,
     with blueprint PED_MODEL,
+    facing ego,
     with behavior PedestrianBehavior()
 
 #################################
 # REQUIREMENTS                  #
 #################################
 
-require (distance to intersection) < INIT_DIST_TO_INTERSECTION
-require (distance from adversary to intersection) < INIT_DIST_TO_INTERSECTION
-require pedestrian.lane is pedCrosswalk.centerline
-require waymoInitLane in intersection.incomingLanes
+require INIT_DIST_TO_INTERSECTION[0]< (distance to intersection) < INIT_DIST_TO_INTERSECTION[1]
+require (distance from pedestrian to intersection) < PED_DIST_TO_INTERSECTION
+require ego.lane is adversary.lane
 
-terminate when (distance to adversary) < (ego.length + adversary.length) / 2
-terminate when (distance to waymoSpawnPt) > TERM_DIST

@@ -24,11 +24,12 @@ param WAYMO_SPEED = VerifaiRange(2.5, 3.5) # Approximately 3 MPH
 param WAYMO_BRAKE = VerifaiRange(0.5, 1.0)
 
 param PASSENGER_SPEED = VerifaiRange(7.5, 8.5) # Approximately 8 MPH
+param ADV_SWITCH_DIST = VerifaiRange(10, 15) # Distance from ego to switch to oncoming lane
 
-EGO_INIT_DIST = [15, 20] # Distance from intersection for ego
-ADV_INIT_DIST = [15, 20] # Distance from intersection for adv
+EGO_INIT_DIST = [35, 40] # Distance from intersection for ego
+ADV_INIT_DIST = [10, 15] # Distance from intersection for adv
 
-param SAFETY_DIST = VerifaiRange(5, 8) # Distance for Waymo to react (slow down)
+param SAFETY_DIST = VerifaiRange(3, 5) # Distance for Waymo to react (slow down)
 CRASH_DIST = 3 # Distance to terminate on collision
 TERM_DIST = 50 # Distance for scenario to terminate normally
 
@@ -40,17 +41,12 @@ behavior WaymoBehavior(trajectory):
     try:
         do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_SPEED, trajectory=trajectory)
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
-        # Driver transitioned to manual mode and slowed.
-        # Moving to the right most edge is not directly modeled with built-in actions,
-        # so focusing on the braking aspect.
         take SetBrakeAction(globalParameters.WAYMO_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
 
 behavior PassengerBehavior(trajectory):
-    # The passenger vehicle turns right, crosses center line, and drives in oncoming traffic.
-    # This behavior is largely defined by its trajectory in the spatial relations.
-    do FollowTrajectoryBehavior(target_speed=globalParameters.PASSENGER_SPEED, trajectory=trajectory)
+    do FollowTrajectoryBehavior(target_speed=globalParameters.PASSENGER_SPEED, trajectory=trajectory) until withinDistanceToAnyObjs(self, globalParameters.ADV_SWITCH_DIST)
+    do LaneChangeBehavior(laneSectionToSwitch=self.laneSection.laneToLeft, is_oppositeTraffic=True, target_speed=globalParameters.PASSENGER_SPEED)
+    do FollowLaneBehavior(target_speed=globalParameters.PASSENGER_SPEED, is_oppositeTraffic=True)
 
 #################################
 # SPATIAL RELATIONS             #
@@ -59,7 +55,13 @@ behavior PassengerBehavior(trajectory):
 intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 
 # Waymo AV: proceeding straight in autonomous mode on westbound Marin Street
-egoInitLane = Uniform(*intersection.incomingLanes)
+
+advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, intersection.maneuvers))
+advInitLane = advManeuver.startLane
+advTrajectory = [advInitLane, advManeuver.connectingLane, advManeuver.endLane]
+advSpawnPt = new OrientedPoint in advInitLane.centerline
+
+egoInitLane = advManeuver.endLane.sections[0].laneToLeft.lane
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInitLane.maneuvers))
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
@@ -67,16 +69,11 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 # Passenger vehicle: turned right onto Marin Street from Kansas Street,
 # crossing the center lane line and traveling in the oncoming traffic lane.
 # First, find an incoming lane that can turn right onto the road ego is on.
-targetRoadForAdvTurn = egoManeuver.endLane.road
-advInitLane = Uniform(*filter(lambda l: any(m.type is ManeuverType.RIGHT_TURN and m.endLane.road is targetRoadForAdvTurn for m in l.maneuvers), intersection.incomingLanes))
 
 # Select the right turn maneuver for the adversary
-advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN and m.endLane.road is targetRoadForAdvTurn, advInitLane.maneuvers))
 
 # To model "traveling in the oncoming traffic lane" after turning right,
 # the final lane of the adversary's trajectory is set to the opposite lane of where ego ends up.
-advTrajectory = [advInitLane, advManeuver.connectingLane, egoManeuver.endLane.oppositeLane]
-advSpawnPt = new OrientedPoint in advInitLane.centerline
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -98,7 +95,8 @@ adversary = new Car at advSpawnPt,
 require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
 require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]
 # Ensure the "oncoming traffic lane" exists for the adversary's trajectory
-require egoManeuver.endLane.oppositeLane is not None
+#require egoManeuver.endLane.oppositeLane is not None
 
-terminate when (distance to adversary) < (ego.length + adversary.length) / 2
-terminate when (distance to egoSpawnPt) > TERM_DIST
+#terminate when (distance to adversary) < (ego.length + adversary.length) / 2
+#terminate when (distance to egoSpawnPt) > TERM_DIST
+

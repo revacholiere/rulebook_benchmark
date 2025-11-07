@@ -23,10 +23,12 @@ ADV_MODEL = 'vehicle.ford.transit' # Represents the white minivan
 EGO_STOP_SPEED = 0 # Ego vehicle is stopped
 param ADV_SPEED = VerifaiRange(3, 5) # Minivan's speed for maneuvering
 
-param ADV_INIT_OFFSET = VerifaiRange(-10, -5) # Minivan initial distance behind ego
+param ADV_INIT_OFFSET_X = VerifaiRange(-0.5, 0.5) # Minivan initial distance behind ego
+param ADV_INIT_OFFSET_Y = VerifaiRange(-10, -15) # Minivan initial lateral offset from ego
+
 param EGO_DIST_TO_INTERSECTION = VerifaiRange(5, 10) # Ego stopped distance from intersection
 
-param ADV_LANE_CHANGE_DIST = VerifaiRange(5, 8) # Minivan initiates lane change when this close to ego
+param ADV_LANE_CHANGE_DIST = VerifaiRange(8.15, 8.16) # Minivan initiates lane change when this close to ego
 
 CRASH_DIST = 1 # Distance threshold for collision
 TERM_DIST = 30 # Scenario termination distance from ego start point
@@ -37,14 +39,16 @@ TERM_DIST = 30 # Scenario termination distance from ego start point
 
 behavior EgoBehavior():
     # Ego vehicle is stopped at a red light
-    take SetSpeedAction(EGO_STOP_SPEED)
+    wait
 
 behavior MinivanBehavior():
     # Minivan approaches the stopped ego
-    do FollowLaneBehavior(target_speed=globalParameters.ADV_SPEED)
+
+    try:
+        do FollowLaneBehavior(target_speed=globalParameters.ADV_SPEED)
     
     # When close enough to ego, attempt a lane change to the faster lane (which is assumed to be a left turn lane)
-    interrupt when (distance to ego) < globalParameters.ADV_LANE_CHANGE_DIST and self.laneSection._fasterLane is not None:
+    interrupt when withinDistanceToObjsInLane(self, globalParameters.ADV_LANE_CHANGE_DIST) and self.laneSection._fasterLane is not None:
         # Perform the lane change to maneuver around ego
         do LaneChangeBehavior(laneSectionToSwitch=self.laneSection.fasterLane, target_speed=globalParameters.ADV_SPEED)
         # After attempting the lane change, continue following the new lane
@@ -61,14 +65,16 @@ intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 # Ensure this lane has a 'fasterLane' (typically to its left) for the minivan to maneuver into,
 # and also has defined maneuvers to represent a valid road segment.
 egoInitLane = Uniform(*filter(lambda l: 
-    l.laneSection.fasterLane is not None and len(l.maneuvers) > 0, 
-    intersection.incomingLanes))
+    all([sec._fasterLane is not None for sec in l.sections]), intersection.incomingLanes))
+
+
 
 # Ego spawns along the centerline of its initial lane
-egoSpawnPt = new OrientedPoint in egoInitLane.centerline
+egoSpawnPt = new OrientedPoint in egoInitLane.centerline, facing roadDirection
+advSpawnPt = new OrientedPoint at egoSpawnPt offset by (globalParameters.ADV_INIT_OFFSET_X, globalParameters.ADV_INIT_OFFSET_Y)
 
 # Minivan spawns behind the ego in the same lane
-advSpawnPt = new OrientedPoint behind ego for globalParameters.ADV_INIT_OFFSET
+
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -78,7 +84,9 @@ ego = new Car at egoSpawnPt,
     with blueprint EGO_MODEL,
     with behavior EgoBehavior()
 
+
 adversary = new Car at advSpawnPt,
+    facing ego,
     with blueprint ADV_MODEL,
     with behavior MinivanBehavior()
 
@@ -87,17 +95,17 @@ adversary = new Car at advSpawnPt,
 #################################
 
 # Ego must be stopped close to the intersection (at the red light)
-require (distance to intersection) <= globalParameters.EGO_DIST_TO_INTERSECTION
+#require (distance to intersection) <= globalParameters.EGO_DIST_TO_INTERSECTION
 
 # Minivan starts in the same lane as ego
-require adversary.lane is ego.lane
+#require adversary.lane is ego.lane
 
 #################################
 # TERMINATION CONDITIONS        #
 #################################
 
 # Terminate when the minivan collides with or comes into very close proximity to the ego
-terminate when (distance to adversary) < CRASH_DIST
+#terminate when (distance to adversary) < CRASH_DIST
 
 # Terminate if ego moves too far from its initial position (e.g., pushed by collision or scenario completion)
 terminate when (distance to egoSpawnPt) > TERM_DIST

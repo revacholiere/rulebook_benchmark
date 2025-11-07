@@ -21,9 +21,10 @@ MODEL_BMW = 'vehicle.bmw.grandtourer'
 
 param EGO_SPEED = VerifaiRange(0.5, 3.0)
 param ADV_SPEED = VerifaiRange(8, 12)
-param ADV_DIST_FROM_EGO = VerifaiRange(-8, -15)
+param ADV_DIST_FROM_EGO = VerifaiRange(-15, -20)
 
-param SAFETY_DIST = VerifaiRange(3, 7)
+param SAFETY_DIST = VerifaiRange(3, 5)
+param EGO_BRAKE = VerifaiRange(0.5, 1.0)
 CRASH_DIST = 1
 INIT_DIST = [15, 20]
 TERM_DIST = 70
@@ -36,9 +37,7 @@ behavior EgoBehavior(trajectory):
     try:
         do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED, trajectory=trajectory)
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
-        take SetBrakeAction(1.0)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
+        take SetBrakeAction(globalParameters.EGO_BRAKE)
 
 #################################
 # SPATIAL RELATIONS             #
@@ -48,11 +47,13 @@ intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 
 egoInitLane = Uniform(*intersection.incomingLanes)
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, egoInitLane.maneuvers))
+advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInitLane.maneuvers))
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
+
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
 advSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.ADV_DIST_FROM_EGO
-
+advTrajectory = [egoInitLane, advManeuver.connectingLane, advManeuver.endLane]
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
@@ -63,8 +64,9 @@ ego = new Car at egoSpawnPt,
 
 adversary = new Car at advSpawnPt,
     with blueprint MODEL_BMW,
-    with behavior FollowTrajectoryBehavior(target_speed=globalParameters.ADV_SPEED, trajectory=egoTrajectory)
+    with behavior FollowTrajectoryBehavior(target_speed=globalParameters.ADV_SPEED, trajectory=advTrajectory)
 
-require INIT_DIST[0] <= (distance to intersection) <= INIT_DIST[1]
-require INIT_DIST[0] <= (distance from adversary to intersection) <= INIT_DIST[1]
-terminate when (distance to adversary) < (ego.length + adversary.length) / 2
+#require INIT_DIST[0] <= (distance to intersection) <= INIT_DIST[1]
+#require INIT_DIST[0] <= (distance from adversary to intersection) <= INIT_DIST[1]
+#terminate when (distance to adversary) < (ego.length + adversary.length) / 2
+require adversary.lane == ego.lane

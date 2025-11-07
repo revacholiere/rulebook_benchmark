@@ -41,13 +41,11 @@ behavior AdvBehavior():
 # SPATIAL RELATIONS             #
 #################################
 
-egoInitLane = Uniform(*filter(lambda l: l.slowerLane is not None, network.lanes))
+egoInitLane = Uniform(*filter(lambda l: all(sec._slowerLane is not None for sec in l.sections), network.lanes))
 
-egoSpawnPt = new OrientedPoint in egoInitLane.centerline following roadDirection for globalParameters.EGO_INIT_OFFSET
+egoSpawnPt = new OrientedPoint on egoInitLane,
+    facing roadDirection
 
-advInitLane = egoInitLane.slowerLane
-
-advSpawnPt = new OrientedPoint in advInitLane.centerline following roadDirection from egoSpawnPt for globalParameters.ADV_RELATIVE_LONG_OFFSET
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -57,6 +55,11 @@ ego = new Car at egoSpawnPt,
     with blueprint MODEL,
     with behavior EgoBehavior()
 
+advInitLane = ego.laneSection.slowerLane.lane
+
+advSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.ADV_RELATIVE_LONG_OFFSET
+
+
 adversary = new Car at advSpawnPt,
     with blueprint ADV_MODEL,
     with behavior AdvBehavior()
@@ -65,5 +68,4 @@ adversary = new Car at advSpawnPt,
 # REQUIREMENTS                  #
 #################################
 
-require egoInitLane.slowerLane is not None
 terminate when (distance to egoSpawnPt) > TERM_DIST

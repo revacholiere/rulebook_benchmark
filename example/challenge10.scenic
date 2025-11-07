@@ -62,5 +62,5 @@ require 15 <= (distance from adversary to intersec) <= 20
 #terminate when (distance to ego_spawn_pt) > 70
 
 
-from rulebook_benchmark import bench
-require monitor bench.bench()
+#from rulebook_benchmark import bench
+#require monitor bench.bench()

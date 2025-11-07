@@ -26,76 +26,73 @@ param ZOX_SPEED = VerifaiRange(5, 7)
 param ZOX_BRAKE = VerifaiRange(0.5, 1.0)
 
 param PASSENGER_SPEED = VerifaiRange(7, 9) 
-param PASSENGER_FOLLOW_DIST = VerifaiRange(-5, -10) 
+param PASSENGER_FOLLOW_DIST = VerifaiRange(-15, -25) 
 
 CROSS_TRAFFIC_INIT_DIST = [15, 20]
 param CROSS_TRAFFIC_SPEED = VerifaiRange(7, 10)
 
-param TURN_YIELD_DIST = VerifaiRange(10, 15) 
+param TURN_YIELD_DIST = VerifaiRange(3, 5) 
+param SAFETY_DIST = VerifaiRange(3, 5)
 CRASH_DIST = 5
 TERM_DIST = 70
+
+ZOOX_DIST_TO_INTERSECTION = [15, 25]
+CROSS_DIST_TO_INTERSECTION = [20, 30]
 
 #################################
 # AGENT BEHAVIORS               #
 #################################
 
-behavior ZooxBehavior(trajectory, cross_traffic_obj):
+behavior YieldBehavior(brake):
+    while True:
+        take SetBrakeAction(brake)
+        take SetThrottleAction(0)
+    
+behavior ZooxBehavior(trajectory):
     try:
-        do FollowTrajectoryBehavior(target_speed=globalParameters.ZOX_SPEED, trajectory=trajectory)
-    interrupt when (distance from self to cross_traffic_obj) < globalParameters.TURN_YIELD_DIST and \
-                  (self.lane is trajectory[1] or self.lane is trajectory[2]):
+        do FollowTrajectoryBehavior(target_speed=globalParameters.ZOX_SPEED, trajectory=trajectory) until distance to intersection < globalParameters.TURN_YIELD_DIST
+        do YieldBehavior(globalParameters.ZOX_BRAKE)
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.ZOX_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
 
-behavior PassengerBehavior(target_speed, initial_lane):
-    do FollowLaneBehavior(target_speed=target_speed, laneToFollow=initial_lane)
+
 
 #################################
 # SPATIAL RELATIONS             #
 #################################
 
-intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
+intersection = Uniform(*filter(lambda i: i.is3Way, network.intersections))
+zooxInitLane = Uniform(*filter(lambda l: any([m.type is ManeuverType.LEFT_TURN for m in l.maneuvers]) and all([m.type is not ManeuverType.STRAIGHT for m in l.maneuvers]), intersection.incomingLanes))
+zooxManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, intersection.maneuvers))
 
-zooxInitLane = Uniform(*intersection.incomingLanes)
-zooxManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, zooxInitLane.maneuvers))
 zooxTrajectory = [zooxInitLane, zooxManeuver.connectingLane, zooxManeuver.endLane]
 zooxSpawnPt = new OrientedPoint in zooxInitLane.centerline
 
 passengerSpawnPt = new OrientedPoint following roadDirection from zooxSpawnPt for globalParameters.PASSENGER_FOLLOW_DIST
 
-crossTrafficInitLane = Uniform(*filter(lambda m:
-        m.type is ManeuverType.STRAIGHT,
-        zooxManeuver.reverseManeuvers)
-    ).startLane
+crossTrafficInitLane = Uniform(*filter(lambda l: any([m.type is ManeuverType.STRAIGHT for m in l.maneuvers]) and all([m.type is not ManeuverType.RIGHT_TURN for m in l.maneuvers]) and all([sec._fasterLane is None for sec in l.sections]), intersection.incomingLanes))
 crossTrafficManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, crossTrafficInitLane.maneuvers))
-crossTrafficTrajectory = [crossTrafficInitLane, crossTrafficManeuver.connectingLane, crossTrafficManeuver.endLane]
 crossTrafficSpawnPt = new OrientedPoint in crossTrafficInitLane.centerline
-
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
+ego = new Car at zooxSpawnPt,
+    with blueprint ZOX_MODEL,
+    with behavior ZooxBehavior(zooxTrajectory)
+
 cross_traffic = new Car at crossTrafficSpawnPt,
     with blueprint CROSS_TRAFFIC_MODEL,
-    with behavior FollowTrajectoryBehavior(target_speed=globalParameters.CROSS_TRAFFIC_SPEED, trajectory=crossTrafficTrajectory)
-
-zoox = new Car at zooxSpawnPt,
-    with blueprint ZOX_MODEL,
-    with behavior ZooxBehavior(zooxTrajectory, cross_traffic)
+    with behavior FollowLaneBehavior(target_speed=globalParameters.CROSS_TRAFFIC_SPEED)
 
 passenger = new Car at passengerSpawnPt,
     with blueprint PASSENGER_MODEL,
-    with behavior PassengerBehavior(globalParameters.PASSENGER_SPEED, zooxInitLane)
+    with behavior FollowLaneBehavior(target_speed=globalParameters.PASSENGER_SPEED)
 
 #################################
 # REQUIREMENTS                  #
 #################################
 
-require ZOX_INIT_DIST[0] <= (distance from zoox to intersection) <= ZOX_INIT_DIST[1]
-require CROSS_TRAFFIC_INIT_DIST[0] <= (distance from cross_traffic to intersection) <= CROSS_TRAFFIC_INIT_DIST[1]
-require (distance from zoox to passenger) > CRASH_DIST 
-require zoox.lane is passenger.lane
-
-terminate when (distance from zoox to passenger) <= (zoox.length + passenger.length) / 2
-terminate when (distance from zoox to zooxSpawnPt) > TERM_DIST
+require ego.lane is passenger.lane
+require ZOOX_DIST_TO_INTERSECTION[0] < (distance to intersection) < ZOOX_DIST_TO_INTERSECTION[1]
+require CROSS_DIST_TO_INTERSECTION[0] < (distance from cross_traffic to intersection) < CROSS_DIST_TO_INTERSECTION[1]

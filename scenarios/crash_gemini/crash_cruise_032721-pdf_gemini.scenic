@@ -20,14 +20,14 @@ param POLICY = 'built_in'
 MODEL = 'vehicle.lincoln.mkz_2017'
 ADV_MODEL = 'vehicle.ford.f150'
 
-param EGO_SPEED = VerifaiRange(3, 6)
+param EGO_SPEED = VerifaiRange(4, 4.5)
 param ADV_SPEED = VerifaiRange(8, 12)
-param EGO_BRAKE = VerifaiRange(0.5, 1.0)
 
-param EGO_INIT_DIST = VerifaiRange(15, 25)
+EGO_INIT_DIST = [15, 25]
 param ADV_DIST_BEHIND = VerifaiRange(-8, -15)
 
-param SAFETY_DIST = VerifaiRange(5, 10)
+param EGO_BRAKE = VerifaiRange(0.5, 1.0)
+param SAFETY_DIST = VerifaiRange(3, 5)
 CRASH_DIST = 3
 TERM_DIST = 70
 
@@ -40,11 +40,20 @@ behavior EgoBehavior(trajectory):
         do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED, trajectory=trajectory)
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.EGO_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
 
 behavior AdversaryBehavior(trajectory):
-    do FollowTrajectoryBehavior(target_speed=globalParameters.ADV_SPEED, trajectory=trajectory)
+    do FollowTrajectoryBehavior(target_speed=globalParameters.ADV_SPEED, trajectory=trajectory) until distance from self to ego < 15
+
+    for i in range(17):
+        take SetSteerAction(-0.3)
+        take SetThrottleAction(1.0)
+    for i in range(17):
+        take SetSteerAction(0.1)
+        take SetThrottleAction(1.0)
+    
+    while True:
+        take SetSteerAction(0.0)
+        take SetThrottleAction(1.0)
 
 #################################
 # SPATIAL RELATIONS             #
@@ -58,10 +67,7 @@ egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, egoIni
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
-advInitLane = egoInitLane.fasterLane
-advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, advInitLane.maneuvers))
-advTrajectory = [advInitLane, advManeuver.connectingLane, advManeuver.endLane]
-advSpawnPt = new OrientedPoint in advInitLane.centerline following roadDirection from egoSpawnPt for globalParameters.ADV_DIST_BEHIND
+
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -71,6 +77,12 @@ ego = new Car at egoSpawnPt,
     with blueprint MODEL,
     with behavior EgoBehavior(egoTrajectory)
 
+
+advInitLane = ego.lane
+advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, advInitLane.maneuvers))
+advTrajectory = [advInitLane, advManeuver.connectingLane, advManeuver.endLane]
+advSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.ADV_DIST_BEHIND
+
 adversary = new Car at advSpawnPt,
     with blueprint ADV_MODEL,
     with behavior AdversaryBehavior(advTrajectory)
@@ -79,11 +91,11 @@ adversary = new Car at advSpawnPt,
 # REQUIREMENTS                  #
 #################################
 
-require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
-require advInitLane is not None
-require advManeuver is not None
-require always (adversary.lane is not ego.lane)
-require globalParameters.ADV_SPEED > globalParameters.EGO_SPEED
 
-terminate when (distance to egoSpawnPt) > TERM_DIST
-terminate when (distance to adversary) < CRASH_DIST
+
+startDir = advInitLane.centerline[1] - advInitLane.centerline[0]
+endDir = advInitLane.centerline[-1] - advInitLane.centerline[-2]
+turnAngle = startDir.angleWith(endDir)
+
+require abs(turnAngle) < math.radians(20)
+require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]

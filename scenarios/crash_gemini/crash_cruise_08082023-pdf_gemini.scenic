@@ -20,15 +20,18 @@ param POLICY = 'built_in'
 AV_MODEL = 'vehicle.lincoln.mkz_2017'
 TRUCK_MODEL = 'vehicle.volvo.fh16'
 
-param AV_SPEED = VerifaiRange(5, 7)
+param AV_SPEED = VerifaiRange(6, 6.5)
 param AV_BRAKE = VerifaiRange(0.5, 1.0)
 
 TRUCK_INITIAL_SPEED = 0.1
-param TRUCK_ACCELERATE_SPEED = VerifaiRange(2, 4)
+param TRUCK_THROTTLE = VerifaiRange(0.5, 1.0)
 
 param TRUCK_INIT_DIST_AHEAD = VerifaiRange(20, 30)
+param TRUCK_WAIT_TIME = VerifaiDiscreteRange(30, 50)
+param AV_MANEUVER_DIST = VerifaiRange(15, 20)
 
 param BYPASS_INIT_DIST = VerifaiRange(10, 15)
+param SAFETY_DIST = VerifaiRange(3, 5)
 BYPASS_CLEAR_DIST = 5
 
 param STOP_DIST_THRESHOLD = VerifaiRange(5, 10)
@@ -40,35 +43,48 @@ TERM_DIST = 70
 # AGENT BEHAVIORS               #
 #################################
 
-behavior CruiseAVBehavior(trajectory, intersectionPt):
-    try:
-        do FollowTrajectoryBehavior(target_speed=globalParameters.AV_SPEED, trajectory=trajectory)
-    interrupt when withinDistanceToObjsInLane(self, globalParameters.BYPASS_INIT_DIST):
-        if self.laneSection.fasterLane is not None:
-            fasterLaneSec = self.laneSection.fasterLane
-            do LaneChangeBehavior(
-                    laneSectionToSwitch=fasterLaneSec,
-                    target_speed=globalParameters.AV_SPEED)
-            do FollowLaneBehavior(
-                    target_speed=globalParameters.AV_SPEED,
-                    laneToFollow=fasterLaneSec.lane) \
-                until (distance to adversary) > BYPASS_CLEAR_DIST
-        do FollowLaneBehavior(target_speed=globalParameters.AV_SPEED)
-    interrupt when (distance to intersectionPt) < globalParameters.STOP_DIST_THRESHOLD:
-        take SetBrakeAction(globalParameters.AV_BRAKE)
-        wait 2 seconds
-        do FollowLaneBehavior(target_speed=globalParameters.AV_SPEED)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
+behavior StoppingBehavior():
+    while True:
 
-behavior SemiTrailerTruckBehavior(egoVehicle, intersectionPt):
+        take SetThrottleAction(0)
+        take SetBrakeAction(1)
+        wait
+
+behavior WaitBehavior():
+    while True:
+        wait
+
+
+behavior GoForwardBehavior(throttle):
+    while True:
+        take SetThrottleAction(throttle)
+
+
+behavior CruiseAVBehavior(trajectory):
     try:
-        take SetSpeedAction(TRUCK_INITIAL_SPEED)
-        wait until (distance from egoVehicle to intersectionPt) < globalParameters.STOP_DIST_THRESHOLD
-        take SetSpeedAction(globalParameters.TRUCK_ACCELERATE_SPEED)
-        do FollowLaneBehavior(target_speed=globalParameters.TRUCK_ACCELERATE_SPEED)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
+        do FollowTrajectoryBehavior(target_speed=globalParameters.AV_SPEED, trajectory=trajectory) until withinDistanceToAnyObjs(self, globalParameters.AV_MANEUVER_DIST)
+        
+        do LaneChangeBehavior(self.laneSection.fasterLane, target_speed=globalParameters.AV_SPEED)
+
+        do FollowLaneBehavior(target_speed=globalParameters.AV_SPEED) for 15 steps
+
+        do LaneChangeBehavior(self.laneSection.slowerLane) for 5 steps
+
+        do StoppingBehavior()
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
+        #print("Crash occurred")
+        take SetBrakeAction(1)
+
+behavior SemiTrailerTruckBehavior(egoVehicle):
+    while (distance from self to ego) > globalParameters.STOP_DIST_THRESHOLD:
+        wait
+    while (distance from self to ego) < globalParameters.STOP_DIST_THRESHOLD:
+        for i in range(globalParameters.TRUCK_WAIT_TIME):
+            wait
+        
+        do GoForwardBehavior(throttle=globalParameters.TRUCK_THROTTLE) 
+        
+
 
 #################################
 # SPATIAL RELATIONS             #
@@ -76,12 +92,11 @@ behavior SemiTrailerTruckBehavior(egoVehicle, intersectionPt):
 
 intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 
-egoInitLane = Uniform(*intersection.incomingLanes)
+egoInitLane = Uniform(*filter(lambda l: all([sec._fasterLane is not None for sec in l.sections]), intersection.incomingLanes))
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInitLane.maneuvers))
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
-intersectionPt = intersection.point
 
 truckSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.TRUCK_INIT_DIST_AHEAD
 
@@ -91,14 +106,10 @@ truckSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for glo
 
 ego = new Car at egoSpawnPt,
     with blueprint AV_MODEL,
-    with behavior CruiseAVBehavior(egoTrajectory, intersectionPt)
+    with behavior CruiseAVBehavior(egoTrajectory)
 
 adversary = new Car at truckSpawnPt,
     with blueprint TRUCK_MODEL,
-    with behavior SemiTrailerTruckBehavior(ego, intersectionPt)
+    with behavior SemiTrailerTruckBehavior(ego)
 
-require (distance to intersectionPt) > (globalParameters.TRUCK_INIT_DIST_AHEAD + globalParameters.BYPASS_INIT_DIST + globalParameters.STOP_DIST_THRESHOLD + 10)
-require always (ego.laneSection._fasterLane is not None)
-
-terminate when (distance to adversary) < CRASH_DIST
-terminate when (distance to egoSpawnPt) > TERM_DIST
+require ego.lane == adversary.lane

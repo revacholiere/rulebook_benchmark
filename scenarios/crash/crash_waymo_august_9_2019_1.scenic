@@ -21,6 +21,8 @@ MODEL = "vehicle.toyota.prius"
 param WAYMO_SPEED = VerifaiRange(0.5, 0.9)  # Waymo AV traveling less than 1 MPH
 param PASSENGER_SPEED = VerifaiRange(4.5, 5.5) # Passenger vehicle traveling approximately 5 MPH
 param PASSENGER_DIST = VerifaiRange(-6, -9) # Initial distance of passenger vehicle behind Waymo AV
+param WAYMO_BRAKE = VerifaiRange(0.5, 1.0)
+param SAFETY_DIST = VerifaiRange(3, 5)
 INIT_DIST = 20
 TERM_DIST = 30
 
@@ -30,7 +32,10 @@ TERM_DIST = 30
 
 behavior WaymoBehavior(trajectory):
     # The Waymo AV is already yielding and traveling at a low speed.
-    do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_SPEED, trajectory=trajectory)
+    try:
+        do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_SPEED, trajectory=trajectory)
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
+        take SetBrakeAction(globalParameters.WAYMO_BRAKE)
 
 behavior PassengerBehavior():
     # The passenger vehicle follows its current lane at the specified speed.

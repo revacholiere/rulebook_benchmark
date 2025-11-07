@@ -35,6 +35,9 @@ class Rule:
         params = {**self.parameters, **runtime_params}
         return self.calculate_violation(handler, step, **params)
     
+    def copy(self):
+        return Rule(self.calculate_violation, self.aggregation_method, **self.parameters)
+
     def evaluate(self, handler, **runtime_params):
         result = Result(aggregation_method=self.aggregation_method)
         for step in range(handler.max_steps):

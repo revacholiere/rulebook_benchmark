@@ -20,11 +20,11 @@ param POLICY = 'built_in'
 ZOOX_MODEL = 'vehicle.lincoln.mkz_2017'
 BICYCLE_MODEL = 'vehicle.bh.crossbike'
 
-param ZOOX_SPEED = VerifaiRange(1, 2.9) # less than 3mph
-param CYCLIST_SPEED = VerifaiRange(5, 8)
+param ZOOX_SPEED = VerifaiRange(3, 4) # less than 3mph = 4.8kmh
+param CYCLIST_SPEED = VerifaiRange(5, 6.5)
 
-param EGO_INIT_DIST = VerifaiRange(5, 15) # Distance from ego to intersection
-param ADV_INIT_DIST = VerifaiRange(10, 25) # Distance from adversary to intersection
+EGO_INIT_DIST = [5, 15] # Distance from ego to intersection
+ADV_INIT_DIST = [15, 20] # Distance from adversary to intersection
 
 COLLISION_DIST = 2 # Distance for collision detection
 TERM_DIST = 50 # Distance to terminate scenario if ego moves too far
@@ -36,8 +36,11 @@ TERM_DIST = 50 # Distance to terminate scenario if ego moves too far
 behavior ZooxBehavior(trajectory):
     do FollowTrajectoryBehavior(target_speed=globalParameters.ZOOX_SPEED, trajectory=trajectory)
 
-behavior CyclistBehavior(trajectory):
-    do FollowTrajectoryBehavior(target_speed=globalParameters.CYCLIST_SPEED, trajectory=trajectory)
+behavior CyclistBehavior():
+    take SetWalkingDirectionAction(self.heading + 0.43) # Turn left onto Mason St.
+    take SetWalkingSpeedAction(globalParameters.CYCLIST_SPEED)
+    
+    #do FollowTrajectoryBehavior(target_speed=globalParameters.CYCLIST_SPEED, trajectory=trajectory)
 
 #################################
 # SPATIAL RELATIONS             #
@@ -49,16 +52,15 @@ intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 # Choose an incoming lane that allows a straight maneuver through the intersection
 egoInitLane = Uniform(*intersection.incomingLanes)
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInitLane.maneuvers))
+egoLeftManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, egoInitLane.maneuvers))
+advSidewalk = egoLeftManeuver.endLane.group._opposite.sidewalk
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
 # Cyclist (Adversary) - traveling westbound on Sutter Street, then enters Mason Street to pass behind Zoox
 # Choose an incoming lane perpendicular to ego's initial lane.
 # To position the cyclist to pass behind the southbound Zoox, a left turn from a westbound lane onto the southbound lane is suitable.
-advInitLane = Uniform(*filter(lambda lane: lane.road.isPerpendicularTo(egoInitLane.road), intersection.incomingLanes))
-advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, advInitLane.maneuvers))
-advTrajectory = [advInitLane, advManeuver.connectingLane, advManeuver.endLane]
-advSpawnPt = new OrientedPoint in advInitLane.centerline
+
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -68,17 +70,18 @@ ego = new Car at egoSpawnPt,
     with blueprint ZOOX_MODEL,
     with behavior ZooxBehavior(egoTrajectory)
 
-adversary = new Bicycle at advSpawnPt,
+adversary = new Bicycle in advSidewalk,
+    facing toward ego,
     with blueprint BICYCLE_MODEL,
-    with behavior CyclistBehavior(advTrajectory)
+    with behavior CyclistBehavior()
 
 #################################
 # REQUIREMENTS                  #
 #################################
 
-require globalParameters.EGO_INIT_DIST[0] <= (distance to intersection) <= globalParameters.EGO_INIT_DIST[1]
-require globalParameters.ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= globalParameters.ADV_INIT_DIST[1]
-require not (adversary in ego.lane.succeeding.lanes) and not (ego in adversary.lane.succeeding.lanes) # Ensure they are not initially in the same line of traffic
+require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
+require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]
+
 
 terminate when (distance to adversary) < COLLISION_DIST
 terminate when (distance to egoSpawnPt) > TERM_DIST

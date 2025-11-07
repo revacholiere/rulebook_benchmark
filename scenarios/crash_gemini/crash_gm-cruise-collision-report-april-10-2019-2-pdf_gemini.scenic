@@ -22,16 +22,23 @@ MODEL = 'vehicle.lincoln.mkz_2017'
 param EGO_SPEED_APPROACH = VerifaiRange(8, 10) # Speed approaching intersection before yielding
 param EGO_SPEED_TURN = VerifaiRange(3, 5)     # Speed during left turn after yielding
 param EGO_BRAKE = VerifaiRange(0.5, 1.0)      # Brake intensity for ego when yielding
+param SAFETY_DIST = VerifaiRange(3, 5)        # Distance to trigger safety braking
 
 param ADV1_SPEED = VerifaiRange(10, 12)       # Speed for overtaking vehicle (faster than ego's approach speed)
 param ADV2_SPEED = VerifaiRange(5, 7)         # Speed for vehicle behind (could be faster than ego's turn speed)
 
-param EGO_INIT_DIST = VerifaiRange(25, 30)    # Initial distance of ego from the intersection
-param ADV1_DIST_BEHIND_EGO = VerifaiRange(5, 10) # Initial distance of adversary1 behind ego
-param ADV2_DIST_BEHIND_EGO = VerifaiRange(2, 5)  # Initial distance of adversary2 behind ego
+param EGO_INIT_DIST = VerifaiRange(15, 25)    # Initial distance of ego from the intersection
+param ADV1_DIST_BEHIND_EGO = VerifaiRange(-15, -20) # Initial distance of adversary1 behind ego
+param ADV2_DIST_BEHIND_EGO = VerifaiRange(-35, -40)  # Initial distance of adversary2 behind ego
 
-param EGO_APPROACH_DIST = VerifaiRange(10, 15) # Distance from intersection when ego starts to slow/yield
+param EGO_APPROACH_DIST = VerifaiRange(0, 5) # Distance from intersection when ego starts to slow/yield
 param OVERTAKE_COMPLETED_DIST = VerifaiRange(10, 15) # Distance adv1 must be ahead of ego for ego to resume turn
+
+
+EGO_INTERSECTION_DIST = VerifaiRange(10, 15)
+ADV1_INTERSECTION_DIST = VerifaiRange(20, 30)
+ADV2_INTERSECTION_DIST = VerifaiRange(40, 50)
+
 
 TERM_DIST = 70 # Distance ego travels from its spawn point to terminate the scenario
 COLLISION_BUFFER = 2.0 # Factor for collision detection (e.g., sum of lengths / 2 for overlap)
@@ -40,22 +47,27 @@ COLLISION_BUFFER = 2.0 # Factor for collision detection (e.g., sum of lengths / 
 # AGENT BEHAVIORS               #
 #################################
 
+behavior StoppingBehavior():
+    while True:
+        take SetThrottleAction(0.0)
+        take SetBrakeAction(1.0)
+
 behavior EgoBehavior(trajectory):
     # Stage 1: Approach the intersection and prepare to turn
-    do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED_APPROACH, trajectory=[trajectory[0]]) until (distance to intersection) < globalParameters.EGO_APPROACH_DIST
-
-    # Stage 2: Yield (brake) for the overtaking vehicle
-    # The 'try' block defines the yielding action (braking).
-    # The 'interrupt when' defines the condition to stop yielding and transition to the next stage.
     try:
-        take SetBrakeAction(globalParameters.EGO_BRAKE)
-    interrupt when (distance from adversary1 to self) > globalParameters.OVERTAKE_COMPLETED_DIST:
-        # Stage 3: Resume the left turn once the overtaking vehicle has passed
+        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED_APPROACH, trajectory=trajectory) until (distance to intersection) < globalParameters.EGO_APPROACH_DIST
+        print("Ego preparing to yield.")
+        do StoppingBehavior() for 2 seconds
+        print("Ego resuming left turn.")
         do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED_TURN, trajectory=trajectory)
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
+        take SetBrakeAction(globalParameters.EGO_BRAKE)
 
-behavior Adv1Behavior(trajectory):
+
+behavior Adv1Behavior(lane):
     # Adversary 1 follows its straight trajectory at a higher speed to overtake ego.
-    do FollowTrajectoryBehavior(target_speed=globalParameters.ADV1_SPEED, trajectory=trajectory)
+    do FollowLaneBehavior(target_speed=globalParameters.ADV1_SPEED, is_oppositeTraffic=True) until distance from self to intersection == 0
+    do FollowLaneBehavior(target_speed=globalParameters.ADV1_SPEED, is_oppositeTraffic=True, laneToFollow=lane)
 
 behavior Adv2Behavior(trajectory):
     # Adversary 2 follows its right turn trajectory.
@@ -71,38 +83,43 @@ intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 # Filters for an incoming lane that supports a left turn maneuver.
 egoInitLane = Uniform(*filter(lambda lane: any(m.type is ManeuverType.LEFT_TURN for m in lane.maneuvers), intersection.incomingLanes))
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, egoInitLane.maneuvers))
+adv1EndLane = egoManeuver.endLane.sections[0].laneToLeft.lane
+adv1Maneuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, adv1EndLane.maneuvers))
+
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
-egoSpawnPt = new OrientedPoint in egoInitLane.centerline ahead of intersection by globalParameters.EGO_INIT_DIST
+start = new OrientedPoint on egoInitLane.centerline
 
-# Adversary 1's initial lane and trajectory (straight, to ego's left)
-# Assumes adv1 is in the lane to the left (fasterLane) of ego's lane.
-adv1InitLane = egoInitLane.laneSections[0].fasterLane.lane
-adv1Maneuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, adv1InitLane.maneuvers))
-adv1Trajectory = [adv1InitLane, adv1Maneuver.connectingLane, adv1Maneuver.endLane]
-# adv1 is initially placed behind ego in its own lane for overtaking.
-adv1SpawnPt = new OrientedPoint in adv1InitLane.centerline behind ego by globalParameters.ADV1_DIST_BEHIND_EGO
 
-# Adversary 2's initial lane and trajectory (right turn, behind and to ego's right)
-# Assumes adv2 is in the lane to the right (slowerLane) of ego's lane.
-adv2InitLane = egoInitLane.laneSections[0].slowerLane.lane
-adv2Maneuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, adv2InitLane.maneuvers))
-adv2Trajectory = [adv2InitLane, adv2Maneuver.connectingLane, adv2Maneuver.endLane]
-# adv2 is initially placed behind ego in its own lane.
-adv2SpawnPt = new OrientedPoint in adv2InitLane.centerline behind ego by globalParameters.ADV2_DIST_BEHIND_EGO
+
 
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
+ego = new Car in egoInitLane.centerline,
     with blueprint MODEL,
     with behavior EgoBehavior(egoTrajectory)
 
-adversary1 = new Car at adv1SpawnPt,
-    with blueprint MODEL,
-    with behavior Adv1Behavior(adv1Trajectory)
 
-adversary2 = new Car at adv2SpawnPt,
+# Adversary 1's initial lane and trajectory (straight, to ego's left)
+# Assumes adv1 is in the lane to the left (fasterLane) of ego's lane.
+adv1InitLane = ego.laneSection.laneToLeft.lane
+# adv1 is initially placed behind ego in its own lane for overtaking.
+
+# Adversary 2's initial lane and trajectory (right turn, behind and to ego's right)
+# Assumes adv2 is in the lane to the right (slowerLane) of ego's lane.
+adv2InitLane = egoInitLane
+adv2Maneuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, adv2InitLane.maneuvers))
+adv2Trajectory = [adv2InitLane, adv2Maneuver.connectingLane, adv2Maneuver.endLane]
+# adv2 is initially placed behind ego in its own lane.
+adv2SpawnPt = new OrientedPoint following roadDirection from ego for globalParameters.ADV2_DIST_BEHIND_EGO
+
+adversary1 = new Car in not visible adv1InitLane.centerline,
+    with blueprint MODEL,
+    facing ego,
+    with behavior Adv1Behavior(adv1Maneuver.connectingLane)
+
+adversary2 = new Car in not visible egoInitLane.centerline,
     with blueprint MODEL,
     with behavior Adv2Behavior(adv2Trajectory)
 
@@ -110,26 +127,6 @@ adversary2 = new Car at adv2SpawnPt,
 # REQUIREMENTS                  #
 #################################
 
-# Ensure ego's lane indeed has a left turn maneuver available
-require any(m.type is ManeuverType.LEFT_TURN for m in egoInitLane.maneuvers)
-
-# Ensure adv1's lane exists and supports a straight maneuver
-require egoInitLane.laneSections[0].fasterLane is not None
-require adv1InitLane is not None
-require any(m.type is ManeuverType.STRAIGHT for m in adv1InitLane.maneuvers)
-require adv1.lane is ego.laneSection.fasterLane.lane # Explicitly require adv1 is in the faster lane
-
-# Ensure adv2's lane exists and supports a right turn maneuver
-require egoInitLane.laneSections[0].slowerLane is not None
-require adv2InitLane is not None
-require any(m.type is ManeuverType.RIGHT_TURN for m in adv2InitLane.maneuvers)
-require adv2.lane is ego.laneSection.slowerLane.lane # Explicitly require adv2 is in the slower lane
-
-# Ensure initial safe distances between vehicles
-require distance from ego to adversary1 > 3
-require distance from ego to adversary2 > 3
-
-# Terminate when adversary2 collides with ego (contact with rear bumper)
-terminate when (distance from ego to adversary2) < (ego.length + adversary2.length) / COLLISION_BUFFER
-# Terminate when ego has traveled far enough, indicating scenario completion or failure to collide
-terminate when (distance to egoSpawnPt) > TERM_DIST
+require EGO_INTERSECTION_DIST - 10 < (distance to intersection) < EGO_INTERSECTION_DIST
+require ADV1_INTERSECTION_DIST - 10 < (distance from adversary1 to intersection) < ADV1_INTERSECTION_DIST
+require ADV2_INTERSECTION_DIST - 10 < (distance from adversary2 to intersection) < ADV2_INTERSECTION_DIST

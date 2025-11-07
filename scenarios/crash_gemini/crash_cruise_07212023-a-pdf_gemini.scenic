@@ -21,38 +21,44 @@ INFINITI_MODEL = 'vehicle.tesla.model3'
 BLACK_SEDAN_MODEL = 'vehicle.mercedes.c_class'
 
 param CRUISE_AV_SPEED = VerifaiRange(7, 10)
-param CRUISE_AV_SLOW_SPEED = VerifaiRange(1, 3)
-param CRUISE_AV_BRAKE = VerifaiRange(0.7, 1.0)
-param CRUISE_AV_INIT_DIST_TO_INTERSECTION = VerifaiRange(35, 45)
-param CRUISE_AV_SLOWING_POINT_DIST = VerifaiRange(15, 25)
 
-param INFINITI_SPEED = VerifaiRange(10, 15)
-param INFINITI_INIT_DIST_TO_INTERSECTION = VerifaiRange(20, 30)
+param CRUISE_AV_BRAKE = VerifaiRange(0.5, 1.0)
 
-param BLACK_SEDAN_SPEED = VerifaiRange(8, 12)
-param BLACK_SEDAN_INIT_DIST_TO_INTERSECTION = VerifaiRange(20, 30)
+CRUISE_AV_INIT_DIST_TO_INTERSECTION = 25
 
-SAFETY_DIST = 5
-CRASH_DIST = 2
+param CRUISE_AV_SLOWING_POINT_DIST = 15
 
-TERM_TRAVEL_DIST = 70
+param INFINITI_SPEED = 20
+INFINITI_INIT_DIST_TO_INTERSECTION = 15
+
+param BLACK_SEDAN_SPEED = 20
+BLACK_SEDAN_INIT_DIST_TO_INTERSECTION = 20
+
+param SAFETY_DIST = VerifaiRange(3, 5)
+param CRASH_DIST = VerifaiRange(5, 6)
+
 
 #################################
 # AGENT BEHAVIORS               #
 #################################
 
+behavior LosingControlBehavior():
+    while True:
+        take SetSteerAction(0.8)
+        take SetThrottleAction(1)
+
 behavior CruiseAVBehavior(trajectory):
     try:
         do FollowTrajectoryBehavior(target_speed=globalParameters.CRUISE_AV_SPEED, trajectory=trajectory) \
             until (distance to intersection) < globalParameters.CRUISE_AV_SLOWING_POINT_DIST
-        do FollowTrajectoryBehavior(target_speed=globalParameters.CRUISE_AV_SLOW_SPEED, trajectory=trajectory)
-    interrupt when withinDistanceToAnyObjs(self, SAFETY_DIST):
+        do FollowTrajectoryBehavior(target_speed=0, trajectory=trajectory)
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.CRUISE_AV_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
+
 
 behavior InfinitiQ60Behavior(trajectory):
-    do FollowTrajectoryBehavior(target_speed=globalParameters.INFINITI_SPEED, trajectory=trajectory)
+    do FollowTrajectoryBehavior(target_speed=globalParameters.INFINITI_SPEED, trajectory=trajectory) until withinDistanceToAnyObjs(self, globalParameters.CRASH_DIST)
+    do LosingControlBehavior()
 
 behavior BlackSedanBehavior(trajectory):
     do FollowTrajectoryBehavior(target_speed=globalParameters.BLACK_SEDAN_SPEED, trajectory=trajectory)
@@ -61,7 +67,7 @@ behavior BlackSedanBehavior(trajectory):
 # SPATIAL RELATIONS             #
 #################################
 
-intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
+intersection = Uniform(*filter(lambda i: i.is4Way and len(i.incomingLanes) == 4, network.intersections))
 
 cruiseAvInitLane = Uniform(*intersection.incomingLanes)
 cruiseAvManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, cruiseAvInitLane.maneuvers))
@@ -69,12 +75,13 @@ cruiseAvTrajectory = [cruiseAvInitLane, cruiseAvManeuver.connectingLane, cruiseA
 cruiseAvSpawnPt = new OrientedPoint in cruiseAvInitLane.centerline
 
 infinitiInitLane = cruiseAvManeuver.reverseManeuvers[0].startLane
+
 infinitiManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, infinitiInitLane.maneuvers))
 infinitiTrajectory = [infinitiInitLane, infinitiManeuver.connectingLane, infinitiManeuver.endLane]
 infinitiSpawnPt = new OrientedPoint in infinitiInitLane.centerline
+infinitiRightManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, infinitiInitLane.maneuvers))
 
-blackSedanInitLaneOptions = [lane for lane in intersection.incomingLanes if lane != cruiseAvInitLane and lane != infinitiInitLane]
-blackSedanInitLane = Uniform(*blackSedanInitLaneOptions)
+blackSedanInitLane = infinitiRightManeuver.reverseManeuvers[0].startLane
 blackSedanManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, blackSedanInitLane.maneuvers))
 blackSedanTrajectory = [blackSedanInitLane, blackSedanManeuver.connectingLane, blackSedanManeuver.endLane]
 blackSedanSpawnPt = new OrientedPoint in blackSedanInitLane.centerline
@@ -91,6 +98,7 @@ infiniti = new Car at infinitiSpawnPt,
     with blueprint INFINITI_MODEL,
     with behavior InfinitiQ60Behavior(infinitiTrajectory)
 
+
 blackSedan = new Car at blackSedanSpawnPt,
     with blueprint BLACK_SEDAN_MODEL,
     with behavior BlackSedanBehavior(blackSedanTrajectory)
@@ -99,17 +107,11 @@ blackSedan = new Car at blackSedanSpawnPt,
 # REQUIREMENTS                  #
 #################################
 
-require globalParameters.CRUISE_AV_INIT_DIST_TO_INTERSECTION[0] <= (distance to intersection) <= globalParameters.CRUISE_AV_INIT_DIST_TO_INTERSECTION[1]
-require globalParameters.INFINITI_INIT_DIST_TO_INTERSECTION[0] <= (distance from infiniti to intersection) <= globalParameters.INFINITI_INIT_DIST_TO_INTERSECTION[1]
-require globalParameters.BLACK_SEDAN_INIT_DIST_TO_INTERSECTION[0] <= (distance from blackSedan to intersection) <= globalParameters.BLACK_SEDAN_INIT_DIST_TO_INTERSECTION[1]
-require (distance from infiniti to intersection) < (distance to intersection)
-require (distance from blackSedan to intersection) < (distance to intersection)
+require CRUISE_AV_INIT_DIST_TO_INTERSECTION - 5 <= (distance from ego to intersection) <= CRUISE_AV_INIT_DIST_TO_INTERSECTION
+require INFINITI_INIT_DIST_TO_INTERSECTION - 5 <= (distance from infiniti to intersection) <= INFINITI_INIT_DIST_TO_INTERSECTION
+require BLACK_SEDAN_INIT_DIST_TO_INTERSECTION - 5 <=(distance from blackSedan to intersection) <= BLACK_SEDAN_INIT_DIST_TO_INTERSECTION
+
 
 #################################
 # TERMINATION CONDITIONS        #
 #################################
-
-terminate when (distance from infiniti to blackSedan) < (infiniti.length + blackSedan.length) / 2
-terminate when (distance from infiniti to ego) < (infiniti.length + ego.length) / 2
-terminate when (distance to egoSpawnPt) > TERM_TRAVEL_DIST
-terminate when (distance from infiniti to infinitiSpawnPt) > TERM_TRAVEL_DIST

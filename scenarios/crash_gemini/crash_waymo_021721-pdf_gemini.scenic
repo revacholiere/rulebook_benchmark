@@ -20,17 +20,20 @@ param POLICY = 'built_in'
 MODEL = "vehicle.toyota.prius"
 
 param EGO_SPEED_ENTERING = VerifaiRange(2.5, 3.5)
-param EGO_BRAKE = VerifaiRange(0.8, 1.0)
+param EGO_SLOW_SPEED = VerifaiRange(0.5, 1.5)
+param EGO_BRAKE = VerifaiRange(0.5, 1.0)
 
 param FRONT_ADV_SPEED = VerifaiRange(7, 10)
 param REAR_ADV_SPEED = VerifaiRange(6.5, 7.5)
 
-param REAR_ADV_DIST = VerifaiRange(-8, -12)
+param REAR_ADV_DIST = VerifaiRange(-20, -30)
 param SAFETY_DIST_EGO_TO_FRONT = VerifaiRange(4, 7)
+param SAFETY_DIST = VerifaiRange(3, 5)
+param EGO_YIELD_DIST = VerifaiRange(5, 7)
 
-CRASH_DIST = 1
-param EGO_INIT_POS_DIST_FROM_INTERSECTION = VerifaiRange(-6, -4)
-param FRONT_ADV_INIT_POS_DIST_FROM_INTERSECTION = VerifaiRange(-6, -4)
+CRASH_DIST = 5
+EGO_INIT_POS_DIST_FROM_INTERSECTION = VerifaiRange(5, 15)
+FRONT_ADV_INIT_POS_DIST_FROM_INTERSECTION = VerifaiRange(5, 15)
 
 TERM_DIST = 100
 TERM_TIME = 15
@@ -39,31 +42,32 @@ TERM_TIME = 15
 # AGENT BEHAVIORS               #
 #################################
 
-behavior WaymoAVBehavior(frontAdv, egoTrajectory, intersection, frontAdvConnectingLane):
-    # Initial state: stopped at the intersection approach
-    take SetSpeedAction(0)
+behavior Stop():
+    while True:
+        take SetThrottleAction(0.0)
+        take SetBrakeAction(1.0)
+        
 
-    # Yield to the front adversary: wait for it to enter the intersection and start its turn
-    wait until (distance from frontAdv to intersection.center) < 5 and \
-               (frontAdv.lane is frontAdvConnectingLane)
 
-    # Slowly enter the intersection
+behavior WaymoAVBehavior(trajectory):
     try:
-        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED_ENTERING, trajectory=egoTrajectory)
+        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED_ENTERING, trajectory=trajectory) until (distance to intersection) < globalParameters.EGO_YIELD_DIST
+        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SLOW_SPEED, trajectory=trajectory) until (distance to frontAdv) < globalParameters.SAFETY_DIST_EGO_TO_FRONT
+        do Stop() until (distance to frontAdv) >= globalParameters.SAFETY_DIST_EGO_TO_FRONT
+        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SLOW_SPEED, trajectory=trajectory)
+
+
     # Waymo AV stops again when the front adversary begins its left turn directly in front
-    interrupt when (distance to frontAdv) < globalParameters.SAFETY_DIST_EGO_TO_FRONT:
-        take SetSpeedAction(0) # Stop completely
-        # Remain stopped. The scenario will terminate on collision or timeout.
-        do SetSpeedAction(0) for TERM_TIME seconds
+    interrupt when (distance to frontAdv) < globalParameters.SAFETY_DIST:
+        take SetBrakeAction(globalParameters.EGO_BRAKE)
 
 behavior FrontAdvBehavior(trajectory):
     do FollowTrajectoryBehavior(target_speed=globalParameters.FRONT_ADV_SPEED, trajectory=trajectory)
 
 behavior RearAdvBehavior():
-    try:
-        do FollowLaneBehavior(target_speed=globalParameters.REAR_ADV_SPEED)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
+    do FollowLaneBehavior(target_speed=globalParameters.REAR_ADV_SPEED) until (distance from self to ego) < CRASH_DIST
+    do Stop()
+
 
 #################################
 # SPATIAL RELATIONS             #
@@ -74,20 +78,20 @@ intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 # Ego (Waymo AV): Approaching the intersection, making a left turn
 egoInitLane = Uniform(*intersection.incomingLanes)
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, egoInitLane.maneuvers))
-egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
-egoSpawnPt = new OrientedPoint in egoInitLane.centerline \
-             offset along roadDirection for globalParameters.EGO_INIT_POS_DIST_FROM_INTERSECTION
 
-# Front Adversary (Passenger Vehicle): To ego's right, making a left turn
-# Selecting another distinct incoming lane that is on a different road (cross-street)
-advFrontInitLane = Uniform(*filter(lambda lane: lane != egoInitLane and lane.road != egoInitLane.road, intersection.incomingLanes))
-advFrontManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, advFrontInitLane.maneuvers))
-advFrontTrajectory = [advFrontInitLane, advFrontManeuver.connectingLane, advFrontManeuver.endLane]
-advFrontSpawnPt = new OrientedPoint in advFrontInitLane.centerline \
-                  offset along roadDirection for globalParameters.FRONT_ADV_INIT_POS_DIST_FROM_INTERSECTION
+egoRightManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, egoInitLane.maneuvers))
+egoRightLane = egoRightManeuver.endLane
+
+advRightInitLane = egoRightLane.sections[0].laneToLeft.lane
+advRightManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, advRightInitLane.maneuvers))
+advRightSpawnPt = new OrientedPoint in advRightInitLane.centerline
+advRightTrajectory = [advRightInitLane, advRightManeuver.connectingLane, advRightManeuver.endLane]
+
+egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
+egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
 # Rear Adversary (Passenger Vehicle): Behind the Waymo AV in the same lane
-advRearSpawnPt = new OrientedPoint following roadDirection for globalParameters.REAR_ADV_DIST from egoSpawnPt
+advRearSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for globalParameters.REAR_ADV_DIST 
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -95,11 +99,11 @@ advRearSpawnPt = new OrientedPoint following roadDirection for globalParameters.
 
 ego = new Car at egoSpawnPt,
     with blueprint MODEL,
-    with behavior WaymoAVBehavior(frontAdv, egoTrajectory, intersection, advFrontManeuver.connectingLane)
+    with behavior WaymoAVBehavior(egoTrajectory)
 
-frontAdv = new Car at advFrontSpawnPt,
+frontAdv = new Car at advRightSpawnPt,
     with blueprint MODEL,
-    with behavior FrontAdvBehavior(advFrontTrajectory)
+    with behavior FrontAdvBehavior(advRightTrajectory)
 
 rearAdv = new Car at advRearSpawnPt,
     with blueprint MODEL,
@@ -109,17 +113,10 @@ rearAdv = new Car at advRearSpawnPt,
 # REQUIREMENTS                  #
 #################################
 
-require (distance to intersection.center) < abs(globalParameters.EGO_INIT_POS_DIST_FROM_INTERSECTION) + 5
-require (distance from frontAdv to intersection.center) < abs(globalParameters.FRONT_ADV_INIT_POS_DIST_FROM_INTERSECTION) + 5
-require ego.lane is egoInitLane
-require frontAdv.lane is advFrontInitLane
-require rearAdv.lane is egoInitLane
-require abs(angle to frontAdv) > 1
+require rearAdv.lane is ego.lane
+require distance from ego to intersection < EGO_INIT_POS_DIST_FROM_INTERSECTION
+require distance from frontAdv to intersection < FRONT_ADV_INIT_POS_DIST_FROM_INTERSECTION
 
 #################################
 # TERMINATION CONDITIONS        #
 #################################
-
-terminate when (distance to rearAdv) < CRASH_DIST
-terminate when (distance to egoSpawnPt) > TERM_DIST
-terminate when currentScenery.currentTime > TERM_TIME

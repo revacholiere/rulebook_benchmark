@@ -24,14 +24,17 @@ ADV_MODEL = 'vehicle.chevrolet.impala'
 param EGO_SPEED = VerifaiRange(7, 10)
 param EGO_BRAKE = VerifaiRange(0.5, 1.0)
 
-PED_SPEED = 1.5
+param PED_SPEED = VerifaiRange(1, 2)
 
 param ADV_SPEED = VerifaiRange(5, 7)
 
-param EGO_INIT_DIST = VerifaiRange(20, 30)
-param ADV_INIT_DIST = VerifaiRange(20, 30)
+EGO_INIT_DIST = [0, 15]
+ADV_INIT_DIST = [20, 30]
+PED_INIT_DIST = [0, 5]
+param PED_YIELD_DIST = VerifaiRange(9, 11)
+param PED_ROTATION = VerifaiRange(1.2, 1.5)
 
-param SAFETY_DIST = VerifaiRange(5, 10)
+param SAFETY_DIST = VerifaiRange(3, 5)
 CRASH_DIST = 3
 TERM_DIST = 70
 
@@ -39,17 +42,31 @@ TERM_DIST = 70
 # AGENT BEHAVIORS               #
 #################################
 
+behavior YieldToPedestrianBehavior():
+    while True:
+        take SetBrakeAction(1.0)
+        take SetThrottleAction(0.0)
+
+behavior WaitBehavior():
+    while True:
+        wait
+
+behavior CrossBehavior():
+    take SetWalkingDirectionAction(self.heading + globalParameters.PED_ROTATION)
+    while True:
+        take SetWalkingSpeedAction(globalParameters.PED_SPEED)
+
 behavior EgoBehavior(trajectory):
     try:
-        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED, trajectory=trajectory)
+        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED, trajectory=trajectory) until withinDistanceToAnyPedestrians(self, globalParameters.PED_YIELD_DIST)
+        do YieldToPedestrianBehavior()
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.EGO_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
+
 
 behavior PedestrianBehavior():
-    do SetSpeedAction(PED_SPEED) for 5 seconds
-    terminate
+    do WaitBehavior() until distance from self to ego < globalParameters.PED_YIELD_DIST + 3
+    do CrossBehavior()
 
 behavior AdversaryBehavior(trajectory):
     do FollowTrajectoryBehavior(target_speed=globalParameters.ADV_SPEED, trajectory=trajectory)
@@ -68,10 +85,8 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
 # Adversary vehicle attempting a left turn from southbound
 # Find the lane opposite to ego's straight path
-advInitLane = Uniform(*filter(lambda m:
-        m.type is ManeuverType.STRAIGHT,
-        egoManeuver.reverseManeuvers)
-    ).startLane
+
+advInitLane = egoManeuver.reverseManeuvers[0].startLane
 # Find a left turn maneuver from this opposite lane
 advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, advInitLane.maneuvers))
 advTrajectory = [advInitLane, advManeuver.connectingLane, advManeuver.endLane]
@@ -80,9 +95,7 @@ advSpawnPt = new OrientedPoint in advInitLane.centerline
 # Pedestrian in the north crosswalk (crossing ego's path)
 # Select a crosswalk at the intersection that connects to the lane ego will enter after crossing the intersection
 egoLaneAfterIntersection = egoManeuver.endLane
-pedCrosswalk = Uniform(*filter(lambda cw: cw.atIntersection(intersection) and cw.connectsLane(egoLaneAfterIntersection), network.crosswalks))
-pedSpawnPt = new OrientedPoint in pedCrosswalk.centerline,
-    with heading pedCrosswalk.direction
+pedSpawnPt = new OrientedPoint on egoLaneAfterIntersection.group.sidewalk
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -98,7 +111,8 @@ adversary = new Car at advSpawnPt,
 
 pedestrian = new Pedestrian at pedSpawnPt,
     with blueprint PEDESTRIAN_MODEL,
-    with behavior PedestrianBehavior()
+    with behavior PedestrianBehavior(),
+    facing ego
 
 #################################
 # REQUIREMENTS                  #
@@ -106,7 +120,4 @@ pedestrian = new Pedestrian at pedSpawnPt,
 
 require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
 require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]
-require (distance from pedestrian to ego) < (SAFETY_DIST + 5) # Ensure pedestrian is close enough to trigger yield
-
-terminate when (distance to egoSpawnPt) > TERM_DIST
-terminate when (distance from ego to adversary) < CRASH_DIST
+require PED_INIT_DIST[0] <= (distance from pedestrian to intersection) <= PED_INIT_DIST[1]

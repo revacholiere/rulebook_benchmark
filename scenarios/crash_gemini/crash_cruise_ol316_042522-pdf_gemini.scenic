@@ -20,15 +20,17 @@ param POLICY = 'built_in'
 MODEL = 'vehicle.lincoln.mkz_2017'
 ADV_MODEL = 'vehicle.tesla.model3'
 
-param CRUISE_SPEED = VerifaiRange(2, 4)
+param CRUISE_SPEED = VerifaiRange(5, 8)
 param CRUISE_BRAKE = VerifaiRange(0.8, 1.0)
+param AV_WAIT_TIME = VerifaiDiscreteRange(10, 30)
 
 param HYUNDAI_SPEED = VerifaiRange(8, 12)
 
 EGO_INIT_DIST = [3, 8]
-ADV_INIT_DIST = [15, 25]
+ADV_INIT_DIST = [25, 35]
 
-param SAFETY_DIST = VerifaiRange(8, 15)
+param NOTICE_DIST = VerifaiRange(20, 30)
+param SAFETY_DIST = VerifaiRange(3, 5)
 CRASH_DIST = 3
 TERM_DIST = 70
 
@@ -38,14 +40,17 @@ TERM_DIST = 70
 
 behavior CruiseAVBehavior(trajectory):
     try:
-        do FollowTrajectoryBehavior(target_speed=globalParameters.CRUISE_SPEED, trajectory=trajectory)
+        for i in range(globalParameters.AV_WAIT_TIME):
+            wait
+        do FollowTrajectoryBehavior(target_speed=globalParameters.CRUISE_SPEED, trajectory=trajectory) until withinDistanceToAnyObjs(self, globalParameters.NOTICE_DIST)
+        take SetThrottleAction(0.0)
+        take SetBrakeAction(1.0)
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.CRUISE_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
 
-behavior HyundaiBehavior(trajectory):
-    do FollowTrajectoryBehavior(target_speed=globalParameters.HYUNDAI_SPEED, trajectory=trajectory)
+
+behavior HyundaiBehavior():
+    do FollowLaneBehavior(target_speed=globalParameters.HYUNDAI_SPEED, is_oppositeTraffic=True)
 
 #################################
 # SPATIAL RELATIONS             #
@@ -56,27 +61,22 @@ intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 egoInitLane = Uniform(*intersection.incomingLanes)
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInitLane.maneuvers))
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
-egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
-advInitLane = Uniform(*filter(lambda m:
-        m.type is ManeuverType.STRAIGHT,
-        egoManeuver.reverseManeuvers)
-    ).startLane
-advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, advInitLane.maneuvers))
-advTrajectory = [advInitLane, advManeuver.connectingLane, advManeuver.endLane]
-advSpawnPt = new OrientedPoint in advInitLane.centerline
+advInitLane = egoManeuver.endLane
+
 
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
+ego = new Car in egoInitLane,
     with blueprint MODEL,
     with behavior CruiseAVBehavior(egoTrajectory)
 
-adversary = new Car at advSpawnPt,
+adversary = new Car in advInitLane,
+    facing toward ego,
     with blueprint ADV_MODEL,
-    with behavior HyundaiBehavior(advTrajectory)
+    with behavior HyundaiBehavior()
 
 #################################
 # REQUIREMENTS                  #
@@ -84,5 +84,3 @@ adversary = new Car at advSpawnPt,
 
 require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
 require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]
-terminate when (distance to egoSpawnPt) > TERM_DIST
-terminate when (distance to adversary) <= CRASH_DIST

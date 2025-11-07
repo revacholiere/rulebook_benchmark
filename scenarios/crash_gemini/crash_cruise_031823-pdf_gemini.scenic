@@ -20,8 +20,8 @@ param POLICY = 'built_in'
 CRUISE_AV_MODEL = 'vehicle.lincoln.mkz_2017'
 MERCEDES_MODEL = 'vehicle.mercedes.c_class_2017'
 
-param CRUISE_AV_SPEED = VerifaiRange(5, 7)
-param MERCEDES_SPEED = VerifaiRange(8, 12)
+param CRUISE_AV_SPEED = VerifaiRange(8, 12)
+param MERCEDES_SPEED = VerifaiRange(20, 30)
 
 EGO_INIT_DIST_RANGE = [20, 30]
 ADV_INIT_DIST_RANGE = [25, 35]
@@ -50,9 +50,10 @@ egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInit
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
-advInitLane = Uniform(*filter(lambda lane:
-    lane.road is not egoInitLane.road and lane in intersection.incomingLanes,
-    network.lanes))
+egoRightManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.RIGHT_TURN, egoInitLane.maneuvers))
+print(egoRightManeuver is None)
+rightLaneOpposite = egoRightManeuver.endLane.group.opposite
+advInitLane = Uniform(*rightLaneOpposite.lanes)
 advManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, advInitLane.maneuvers))
 advTrajectory = [advInitLane, advManeuver.connectingLane, advManeuver.endLane]
 advSpawnPt = new OrientedPoint in advInitLane.centerline
@@ -61,7 +62,7 @@ advSpawnPt = new OrientedPoint in advInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-cruise_av = new Car at egoSpawnPt,
+ego = new Car at egoSpawnPt,
     with blueprint CRUISE_AV_MODEL,
     with behavior CruiseAVBehavior(egoTrajectory)
 
@@ -72,5 +73,5 @@ mercedes_sedan = new Car at advSpawnPt,
 require EGO_INIT_DIST_RANGE[0] <= (distance to intersection) <= EGO_INIT_DIST_RANGE[1]
 require ADV_INIT_DIST_RANGE[0] <= (distance from mercedes_sedan to intersection) <= ADV_INIT_DIST_RANGE[1]
 
-terminate when (distance to mercedes_sedan) < CRASH_DIST
-terminate when (distance to egoSpawnPt) > TERM_DIST or (distance from mercedes_sedan to advSpawnPt) > TERM_DIST
+#terminate when (distance to mercedes_sedan) < CRASH_DIST
+#terminate when (distance to egoSpawnPt) > TERM_DIST or (distance from mercedes_sedan to advSpawnPt) > TERM_DIST

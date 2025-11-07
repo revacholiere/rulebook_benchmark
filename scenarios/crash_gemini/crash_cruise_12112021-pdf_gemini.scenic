@@ -20,17 +20,20 @@ param POLICY = 'built_in'
 MODEL = 'vehicle.lincoln.mkz_2017'
 BICYCLE_MODEL = 'vehicle.bh.crossbike'
 
-param CRUISE_AV_SPEED = VerifaiRange(3, 5) # Approx 6-9 MPH
+param CRUISE_AV_SPEED = VerifaiRange(5, 8) # Approx 6-9 MPH
 param CRUISE_AV_BRAKE = VerifaiRange(0.5, 1.0)
 
 param ADVERSARY_SPEED = VerifaiRange(7, 9) # Approx 15-20 MPH (8 MPH was reference, so slightly faster for collision)
-param ADVERSARY_DIST = VerifaiRange(-6, -10) # Initial distance behind ego
+param ADVERSARY_DIST = VerifaiRange(-15, -25) # Initial distance behind ego
 
 param CYCLIST_SPEED = VerifaiRange(2, 4) # Approx 4-9 MPH
-param CYCLIST_INIT_DIST_TO_INTERSECTION = VerifaiRange(5, 10) # How far the cyclist is from the intersection entrance
 
-param EGO_INIT_DIST_TO_INTERSECTION = VerifaiRange(5, 10) # Ego's initial distance to the intersection
-param SAFETY_DIST = VerifaiRange(5, 8) # Ego braking distance for cyclist
+
+EGO_INIT_DIST_TO_INTERSECTION = 20 # Ego's initial distance to the intersection
+param SAFETY_DIST = VerifaiRange(3, 5)
+param BIKE_DIST = VerifaiRange(10, 15)
+param BIKE_OFFSET_Y = VerifaiRange(20, 40) # Lateral offset for cyclist spawn point
+param BIKE_ANGLE = VerifaiRange(1.3, 1.5)
 CRASH_DIST = 2 # Distance for ego termination upon collision
 
 TERM_DIST_EGO_TRAVEL = 50 # Scenario termination if ego travels too far
@@ -39,25 +42,43 @@ TERM_DIST_EGO_TRAVEL = 50 # Scenario termination if ego travels too far
 # AGENT BEHAVIORS               #
 #################################
 
+behavior StopBehavior():
+    while True:
+        take SetBrakeAction(1.0)
+    
+behavior WaitBehavior():
+    while True:
+        wait
+
 behavior CruiseAVBehavior(trajectory):
     try:
-        do FollowTrajectoryBehavior(target_speed=globalParameters.CRUISE_AV_SPEED, trajectory=trajectory)
+        do FollowTrajectoryBehavior(target_speed=globalParameters.CRUISE_AV_SPEED, trajectory=trajectory) until withinDistanceToAnyPedestrians(self, globalParameters.BIKE_DIST)
+        do StopBehavior()
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.CRUISE_AV_BRAKE)
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
 
 behavior AdversaryBehavior():
     do FollowLaneBehavior(target_speed=globalParameters.ADVERSARY_SPEED)
 
-behavior CyclistBehavior(trajectory):
-    do FollowTrajectoryBehavior(target_speed=globalParameters.CYCLIST_SPEED, trajectory=trajectory)
+
+behavior CyclingBehavior(speed):
+    while True:
+        take SetWalkingSpeedAction(speed)
+
+
+behavior CyclistBehavior():
+    do WaitBehavior() until withinDistanceToAnyObjs(self, globalParameters.BIKE_DIST + 7)
+
+    take SetWalkingDirectionAction(self.heading + globalParameters.BIKE_ANGLE)
+
+    do CyclingBehavior(globalParameters.CYCLIST_SPEED)
+
 
 #################################
 # SPATIAL RELATIONS             #
 #################################
 
-import math
+
 
 intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 
@@ -66,19 +87,13 @@ egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInit
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
-advSpawnPt = new OrientedPoint following roadDirection from ego for globalParameters.ADVERSARY_DIST
 
 # Find a crossing lane for the cyclist
-cyclistInitLane = Uniform(*filter(lambda l:
-    l is not egoInitLane and
-    abs(l.heading - egoInitLane.heading) > math.pi/2 - 0.1 and
-    abs(l.heading - egoInitLane.heading) < math.pi/2 + 0.1,
-    intersection.incomingLanes))
 
-cyclistManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, cyclistInitLane.maneuvers))
-cyclistTrajectory = [cyclistInitLane, cyclistManeuver.connectingLane, cyclistManeuver.endLane]
+
+
 # Place the cyclist at the start of its crossing path, potentially already in the intersection area
-cyclistSpawnPt = new OrientedPoint in cyclistInitLane.centerline ahead of cyclistInitLane.start by globalParameters.CYCLIST_INIT_DIST_TO_INTERSECTION
+
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -88,22 +103,21 @@ ego = new Car at egoSpawnPt,
     with blueprint MODEL,
     with behavior CruiseAVBehavior(egoTrajectory)
 
+advSpawnPt = new OrientedPoint following roadDirection from ego for globalParameters.ADVERSARY_DIST
+
 adversary = new Car at advSpawnPt,
     with blueprint MODEL,
     with behavior AdversaryBehavior()
 
-cyclist = new Bicycle at cyclistSpawnPt,
+
+cyclist = new Bicycle at (egoSpawnPt offset by (-10, globalParameters.BIKE_OFFSET_Y)),
+    facing toward ego,
     with blueprint BICYCLE_MODEL,
-    with behavior CyclistBehavior(cyclistTrajectory)
+    with behavior CyclistBehavior()
 
 #################################
 # REQUIREMENTS                  #
 #################################
 
-require globalParameters.EGO_INIT_DIST_TO_INTERSECTION[0] <= (distance to intersection) <= globalParameters.EGO_INIT_DIST_TO_INTERSECTION[1]
-require (distance from cyclist to cyclistInitLane.start) >= (globalParameters.CYCLIST_INIT_DIST_TO_INTERSECTION - 2)
+require distance to intersection < EGO_INIT_DIST_TO_INTERSECTION
 # Ensure the cyclist is actually crossing the ego's path (not just parallel)
-require abs(ego.heading - cyclist.heading) > math.pi/2 - 0.1 and abs(ego.heading - cyclist.heading) < math.pi/2 + 0.1
-
-terminate when (distance to adversary) < (ego.length + adversary.length) / 2
-terminate when (distance to egoSpawnPt) > TERM_DIST_EGO_TRAVEL

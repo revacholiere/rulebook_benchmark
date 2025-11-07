@@ -23,14 +23,15 @@ DOLLY_MODEL = 'vehicle.audi.etron' # Placeholder model for a tow dolly
 
 param CRUISE_AV_SPEED = VerifaiRange(5, 8) # Cruise AV speed in m/s
 param TRUCK_OFFSET_LATERAL = VerifaiRange(1.0, 2.0) # Lateral offset for "double-parked" from lane centerline
-DOLLY_ATTACH_DIST = 2 # Distance from the back of the truck to the front of the dolly
+param DOLLY_ATTACH_DIST = VerifaiRange(1.0, 3.0) # Distance from the back of the truck to the front of the dolly
 
-EGO_INIT_POS_BEFORE_INTERSECTION_MIN = 10
-EGO_INIT_POS_BEFORE_INTERSECTION_MAX = 20
-param TRUCK_POS_AFTER_INTERSECTION = VerifaiRange(5, 15) # Distance of truck after the start of its lane segment (which is after the intersection)
 
-SAFETY_DIST = 10 # Safety distance for ego braking action
-TERM_TRAVELED_DIST = 100 # Maximum distance ego travels before terminating if no incident
+EGO_INTERSECTION_DISTANCE = 15
+TRUCK_INTERSECTION_DISTANCE = 20
+param SAFETY_DIST = VerifaiRange(3, 5)
+param EGO_BRAKE = VerifaiRange(0.5, 1.0)
+param TRUCK_OFFSET_X = VerifaiRange(1, 1.5)
+
 
 #################################
 # AGENT BEHAVIORS               #
@@ -39,55 +40,58 @@ TERM_TRAVELED_DIST = 100 # Maximum distance ego travels before terminating if no
 behavior EgoBehavior(trajectory):
     try:
         do FollowTrajectoryBehavior(target_speed=globalParameters.CRUISE_AV_SPEED, trajectory=trajectory)
-    interrupt when withinDistanceToAnyObjs(self, SAFETY_DIST):
-        take SetBrakeAction(1.0) # Apply full brake if too close to any object
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
+        take SetBrakeAction(globalParameters.EGO_BRAKE)
 
 #################################
 # SPATIAL RELATIONS             #
 #################################
 
 # Find an intersection to set up the "shortly after intersection" condition
-intersection = Uniform(*filter(lambda i: i.is4Way or i.is3Way, network.intersections))
+intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))
 
 # Ego's entry lane and maneuver to go straight through the intersection
-egoEntryLane = Uniform(*intersection.incomingLanes)
+egoEntryLane = Uniform(*filter(lambda l: all(sec._slowerLane is None and sec._fasterLane is None for sec in l.sections), intersection.incomingLanes))
 egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoEntryLane.maneuvers))
 egoTrajectory = [egoEntryLane, egoManeuver.connectingLane, egoManeuver.endLane]
-egoSpawnPt = new OrientedPoint in egoEntryLane.centerline
+egoSpawnPt = new OrientedPoint in egoEntryLane
 
 # Truck's lane: after the intersection, specifically in the lane the ego exits into
 truckLane = egoManeuver.endLane
-truckSpawnPt = new OrientedPoint in truckLane.offset(globalParameters.TRUCK_OFFSET_LATERAL)
-    following roadDirection from truckLane.centerline for globalParameters.TRUCK_POS_AFTER_INTERSECTION
+truckSpawnPt = new OrientedPoint in truckLane.centerline
 
-# Dolly is positioned behind the truck
-dollySpawnPt = new OrientedPoint behind truck by DOLLY_ATTACH_DIST
+
 
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-cruise_av = new Car at egoSpawnPt,
+ego = new Car at egoSpawnPt,
     with blueprint CRUISE_AV_MODEL,
     with behavior EgoBehavior(egoTrajectory)
 
-truck = new Car at truckSpawnPt,
+truck = new Car at truckSpawnPt offset by (globalParameters.TRUCK_OFFSET_X, 0),
     with blueprint TRUCK_MODEL # Truck is stationary, double-parked
 
+
+# Dolly is positioned behind the truck
+dollySpawnPt = new OrientedPoint behind truck by globalParameters.DOLLY_ATTACH_DIST
+
 dolly = new Car at dollySpawnPt,
-    with blueprint DOLLY_MODEL # Dolly is stationary, attached to the back of the truck
+    with blueprint DOLLY_MODEL, facing truck # Dolly is stationary, attached to the back of the truck
 
 #################################
 # REQUIREMENTS                  #
 #################################
 
 # Ensure ego is positioned before the intersection
-require EGO_INIT_POS_BEFORE_INTERSECTION_MIN <= (distance from cruise_av to intersection) <= EGO_INIT_POS_BEFORE_INTERSECTION_MAX
+#require EGO_INIT_POS_BEFORE_INTERSECTION_MIN <= (distance from cruise_av to intersection) <= EGO_INIT_POS_BEFORE_INTERSECTION_MAX
 # Ensure the truck and dolly are initially not in contact with the cruise_av
-require (distance from cruise_av to truck) > (cruise_av.length + truck.length) / 2
-require (distance from cruise_av to dolly) > (cruise_av.length + dolly.length) / 2
-
+#require (distance from cruise_av to truck) > (cruise_av.length + truck.length) / 2
+#require (distance from cruise_av to dolly) > (cruise_av.length + dolly.length) / 2
+require (distance from ego to intersection) < EGO_INTERSECTION_DISTANCE
+require (distance from truck to intersection) < TRUCK_INTERSECTION_DISTANCE
 # Termination condition: contact with the tow dolly
-terminate when (distance from cruise_av to dolly) < (cruise_av.length + dolly.length) / 2
+#terminate when (distance from ego to dolly) < (ego.length + dolly.length) / 2
 # Terminate if ego travels too far without incident (to prevent infinite simulation)
-terminate when (distance from cruise_av to egoSpawnPt) > TERM_TRAVELED_DIST
+#terminate when (distance from ego to egoSpawnPt) > TERM_TRAVELED_DIST

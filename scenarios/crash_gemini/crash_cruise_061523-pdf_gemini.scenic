@@ -63,8 +63,8 @@ ego = new Car at egoSpawnPt,
     with behavior EgoBehavior()
 
 abl = new Car at ablSpawnPt,
-    with blueprint ABL_MODEL,
-    with behavior SetSpeedAction(ABL_STOP_SPEED)
+    with blueprint ABL_MODEL
+    #with behavior SetSpeedAction(ABL_STOP_SPEED)
 
 require abl.lane == ego.lane
 require always (ego.laneSection._fasterLane is not None)

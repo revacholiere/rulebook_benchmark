@@ -17,7 +17,7 @@ from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
 from sklearn.model_selection import KFold
 from reasonable_crowd.visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
 
-SEED = 42
+SEED = 50
 NUM_RUNS = 3
 
 
@@ -48,9 +48,10 @@ df['votes'] = y_votes
 
 print(df.head())
 
-rb = Rulebook(rule_file="reasonable_crowd_rule_functions.py", rulebook_file="reasonable_crowd_4.graph")
+rb = Rulebook(rule_file="reasonable_crowd_rule_functions.py", rulebook_file="reasonable_crowd_5.graph")
 rule_id_to_rule = {1: f1, 2: f2, 3: f3, 4: f4, 5: f5, 6: f6, 7: f7, 8: f8, 9: f9, 11: f11, 12: f12, 13: f13, 15: f15, 17: f17, 18: f18}
 rulebook = InPlaceRulebook(rb.priority_graph, rule_id_to_rule)
+
 
 rule_id_to_params = {4: ["threshold"], 6: ["threshold"], 8: ["threshold"], 9: ["threshold"], 5: ["velocity", "threshold", "timesteps"], 11: ["threshold"], 12: ["threshold"], 13: ["threshold"], 18: ["buffer"]}
 rule_id_to_values = {4: {"threshold": [0.6, 0.8, 1, 1.2]}, 6: {"threshold": [0.6, 0.8, 1, 1.2]}, 8: {"threshold": [0.5, 1, 1.5, 2]}, 9: {"threshold": [0.5 , 1, 1.5, 2]}, 5: {"velocity": [4], "threshold": [-1.5, -1, -0.5], "timesteps": [30]}, 11: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 12: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 13: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 18: {"buffer": [0.3, 0.5, 0.8]}}
@@ -170,25 +171,30 @@ for run in range(NUM_RUNS):
         val_size = int(0.15 * len(X_train))
         X_val, y_val, votes_val = X_train[:val_size], y_train[:val_size], votes_train[:val_size]
         X_train, y_train, votes_train = X_train[val_size:], y_train[val_size:], votes_train[val_size:]
-
+        
+        
+        # if cached best config for this fold exists, load it
+        if os.path.exists(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl')):
+            best_config = pickle.load(open(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'rb'))
+        else:
         # Optimize rulebook on this fold
-        """ best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
-            rulebook,
-            training_data=X_train,
-            training_labels=y_train,
-            training_votes=votes_train,
-            validation_data=X_val,
-            validation_labels=y_val,
-            validation_votes=votes_val,
-            rule_id_to_params=rule_id_to_params,
-            rule_id_to_values=rule_id_to_values,
-            trajectories_dict=trajectories_dict,
-            rule_parameter_result_dict=cache_dict
-        ) """
+            best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
+                rulebook,
+                training_data=X_train,
+                training_labels=y_train,
+                training_votes=votes_train,
+                validation_data=X_val,
+                validation_labels=y_val,
+                validation_votes=votes_val,
+                rule_id_to_params=rule_id_to_params,
+                rule_id_to_values=rule_id_to_values,
+                trajectories_dict=trajectories_dict,
+                rule_parameter_result_dict=cache_dict
+            )
         
         # load config
 
-        best_config = pickle.load(open(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'rb'))
+        
 
         # Apply best config to the rulebook
         for rule_id, params in best_config.items():

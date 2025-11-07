@@ -26,9 +26,9 @@ BICYCLE_MODEL = "vehicle.bh.crossbike"
 
 param WAYMO_SPEED = VerifaiRange(2.5, 3.5)
 param WAYMO_BRAKE = VerifaiRange(0.5, 1.0)
+param SAFETY_DIST = VerifaiRange(3, 5)
 param PASSENGER_SPEED = VerifaiRange(7, 9)
 param PASSENGER_DIST = VerifaiRange(-6, -8)
-param SAFETY_DIST = VerifaiRange(3, 5)
 BICYCLE_SPEED = 2
 BICYCLE_DIST = 10
 INIT_DIST = 20

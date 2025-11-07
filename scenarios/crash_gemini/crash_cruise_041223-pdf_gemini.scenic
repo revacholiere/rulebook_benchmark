@@ -23,6 +23,9 @@ SEDAN_MODEL = 'vehicle.tesla.model3'
 param CRUISE_AV_SPEED = VerifaiRange(5, 7)
 param CRUISE_AV_SPEED_MANEUVER = VerifaiRange(2, 4)
 
+param EGO_BRAKE = VerifaiRange(0.5, 1.0)
+param SAFETY_DIST = VerifaiRange(8, 10)
+
 param SEDAN_INIT_DIST = VerifaiRange(15, 25)
 param SEDAN_REVERSE_SPEED = VerifaiRange(-2, -3)
 
@@ -38,33 +41,26 @@ MAX_TIME = 30
 behavior CruiseAVBehavior():
     try:
         do FollowLaneBehavior(target_speed=globalParameters.CRUISE_AV_SPEED)
-    interrupt when withinDistanceToAnyObjs(self, globalParameters.STOP_DIST):
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(1.0)
-        wait until self.speed < 0.1
-        slowerLaneSec = self.laneSection.slowerLane
-        do LaneChangeBehavior(laneSectionToSwitch=slowerLaneSec, target_speed=globalParameters.CRUISE_AV_SPEED_MANEUVER)
-        do FollowLaneBehavior(target_speed=globalParameters.CRUISE_AV_SPEED_MANEUVER, laneToFollow=slowerLaneSec.lane) \
-            until (distance to adversary) > self.length + adversary.length + 5
-    interrupt when withinDistanceToAnyObjs(self, CRASH_DIST):
-        terminate
 
 behavior SedanBehavior():
-    take SetSpeedAction(0)
-    wait until ego.speed < 0.1 and (distance from self to ego) < (globalParameters.STOP_DIST + 2)
-    wait 2 seconds
-    take SetSpeedAction(globalParameters.SEDAN_REVERSE_SPEED)
-    wait 1.5 seconds
-    take SetSpeedAction(0)
+    print(self.metaDriveActor.enable_reverse)
+    take SetReverseAction(True)
+    print(self.metaDriveActor.enable_reverse)
+
+    while True:
+
+        take SetBrakeAction(1.0)
 
 #################################
 # SPATIAL RELATIONS             #
 #################################
 
-road = Uniform(*network.roads)
-egoLane = Uniform(*filter(lambda l: l.slowerLane is not None and l.parentLaneGroup.isForward and len(l.parentLaneGroup.lanes) > 1, road.lanes))
+egoLane = Uniform(*filter(lambda l: all(sec._slowerLane is not None  and sec._fasterLane is None for sec in l.sections), network.lanes))
 egoSpawnPt = new OrientedPoint in egoLane.centerline
 
-advSpawnPt = new OrientedPoint ahead of egoSpawnPt for globalParameters.SEDAN_INIT_DIST
+advSpawnPt = new OrientedPoint ahead of egoSpawnPt by globalParameters.SEDAN_INIT_DIST
 
 #################################
 # SCENARIO SPECIFICATION        #
@@ -78,10 +74,4 @@ adversary = new Car at advSpawnPt,
     with blueprint SEDAN_MODEL,
     with behavior SedanBehavior()
 
-require ego.laneSection._slowerLane is not None
-require (distance to adversary) > globalParameters.STOP_DIST + 2
-require ego.lane is adversary.lane
 
-terminate when (distance to adversary) < CRASH_DIST
-terminate when (distance to egoSpawnPt) > TERM_DIST
-terminate when self.elapsedTime > MAX_TIME
