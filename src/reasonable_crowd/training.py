@@ -10,7 +10,7 @@ from rulebook_benchmark.rulebook import Rulebook
 from reasonable_crowd.InPlaceRulebook import InPlaceRulebook
 import numpy as np
 import pandas as pd
-from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation, number_of_unique_rulebooks, find_scenario_rulebooks, group_rulebook
+from reasonable_crowd.optimization import cache_rule_evaluations, optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing, simulated_annealing_with_validation, number_of_unique_rulebooks, find_scenario_rulebooks, group_rulebook, optimize_rulebook_greedy_by_priority
 import pickle
 from sklearn.model_selection import train_test_split
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
@@ -18,7 +18,7 @@ from sklearn.model_selection import KFold
 from reasonable_crowd.visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
 
 SEED = 50
-NUM_RUNS = 3
+NUM_RUNS = 10
 
 
 path_to_reasonable_crowd = "../../../Reasonable-Crowd"
@@ -69,8 +69,8 @@ else:
     pickle.dump(cache_dict, open(os.path.join(output_directory, 'tuning_cache.pkl'), 'wb'))
         
 
-groups = [[1, 2], [3, 7], [8, 9, 11, 12, 13], [17, 18], [4, 5, 6], [15]]
-name_to_group = {"safety-critical": groups[0], "operation-limit": groups[1], "safety-enhancing": groups[2], "predictability": groups[3], "precautionary": groups[4], "regulatory": groups[5]}
+groups = [[1, 2], [3, 7], [8, 9, 11, 12, 13], [17, 18, 15], [4, 5, 6]]
+name_to_group = {"safety-critical": groups[0], "operation-limit": groups[1], "safety-enhancing": groups[2], "predictability": groups[3], "precautionary": groups[4]}
 group_to_name = {tuple(value): key for key, value in name_to_group.items()}
 rulebook = group_rulebook(rulebook, groups, keep_relations=True)
 
@@ -138,7 +138,9 @@ print("Total:", total)
 print("Accuracy:", accuracy)
 print("Weighted Accuracy:", weighted_accuracy) """
 
-
+accuracy_list = []
+weighted_accuracy_list = []
+correct_list = []
 
 
 
@@ -167,18 +169,32 @@ for run in range(NUM_RUNS):
         y_test = [y[i] for i in test_index]
         votes_test = [votes[i] for i in test_index]
 
-        # Further split training into train/validation (15%)
-        val_size = int(0.15 * len(X_train))
+        # Further split training into train/validation (50%)
+        val_size = int(0.5 * len(X_train))
         X_val, y_val, votes_val = X_train[:val_size], y_train[:val_size], votes_train[:val_size]
         X_train, y_train, votes_train = X_train[val_size:], y_train[val_size:], votes_train[val_size:]
         
         
         # if cached best config for this fold exists, load it
-        if os.path.exists(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl')):
-            best_config = pickle.load(open(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'rb'))
+        if os.path.exists(os.path.join(output_directory, f'greedy_best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl')):
+            best_config = pickle.load(open(os.path.join(output_directory, f'greedy_best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'rb'))
         else:
         # Optimize rulebook on this fold
-            best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
+            """                 best_config, best_score, best_val_score = optimize_rulebook_grid_bruteforce_with_validation(
+                rulebook,
+                training_data=X_train,
+                training_labels=y_train,
+                training_votes=votes_train,
+                validation_data=X_val,
+                validation_labels=y_val,
+                validation_votes=votes_val,
+                rule_id_to_params=rule_id_to_params,
+                rule_id_to_values=rule_id_to_values,
+                trajectories_dict=trajectories_dict,
+                rule_parameter_result_dict=cache_dict
+            ) """
+            
+            best_config, best_score, best_val_score = optimize_rulebook_greedy_by_priority(
                 rulebook,
                 training_data=X_train,
                 training_labels=y_train,
@@ -202,7 +218,7 @@ for run in range(NUM_RUNS):
             rule.parameters.update(params)
         
         #Save best config for this fold to a file
-        with open(os.path.join(output_directory, f'best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'wb') as f:
+        with open(os.path.join(output_directory, f'greedy_best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'wb') as f:
             pickle.dump(best_config, f)
         
         
@@ -220,24 +236,35 @@ for run in range(NUM_RUNS):
         correct_list.append(correct)
         accuracy_list.append(accuracy)
         weighted_accuracy_list.append(weighted_accuracy)
+        
+
         fold += 1
-    # Report averaged results
-    avg_correct = np.mean(correct_list)
-    avg_accuracy = np.mean(accuracy_list)
-    std_dev_accuracy = np.std(accuracy_list)
-    avg_weighted_accuracy = np.mean(weighted_accuracy_list)
-    std_dev_weighted_accuracy = np.std(weighted_accuracy_list)
 
-
-    print(f"5-Fold Cross-Validation Results for run {run}, seed {SEED}:")
-    print("Average Correct:", avg_correct)
-    print("Average Accuracy:", avg_accuracy)
-    print("Average Weighted Accuracy:", avg_weighted_accuracy)
-    print("Std Dev Accuracy:", std_dev_accuracy)
-    print("Std Dev Weighted Accuracy:", std_dev_weighted_accuracy)
     
     SEED += 1
 
+
+
+# Report averaged results
+avg_correct = np.mean(correct_list)
+avg_accuracy = np.mean(accuracy_list)
+std_dev_accuracy = np.std(accuracy_list)
+avg_weighted_accuracy = np.mean(weighted_accuracy_list)
+std_dev_weighted_accuracy = np.std(weighted_accuracy_list)
+
+
+print(f"5-Fold Cross-Validation Results for run {run}, seed {SEED}:")
+print("Average Correct:", avg_correct)
+print("Average Accuracy:", avg_accuracy)
+print("Average Weighted Accuracy:", avg_weighted_accuracy)
+print("Std Dev Accuracy:", std_dev_accuracy)
+print("Std Dev Weighted Accuracy:", std_dev_weighted_accuracy)
+
+# count reasons
+# drop None values
+reasons = [reason for reason in reasons if reason is not None]
+np.unique(reasons, return_counts=True)
+print("Reason Counts:", dict(zip(*np.unique(reasons, return_counts=True))))
 
 #num_rulebooks, correct, accuracy, unsatisfiable_samples = number_of_unique_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict, seed = 43)
 

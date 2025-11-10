@@ -279,6 +279,7 @@ class VariableHandler:
         for i in range(len(self.realization)):
             pool = self(i)
             colliding = set(pool.vehicles_colliding.keys())
+            colliding.update(pool.vrus_colliding.keys())
 
             # new collisions
             for uid in colliding - previous_colliding:

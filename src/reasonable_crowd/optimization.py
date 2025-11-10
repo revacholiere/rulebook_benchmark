@@ -48,6 +48,8 @@ def cache_rule_evaluations(
         pbar.update(1)
 
     pbar.close()
+    
+    
 
 
 def optimize_rulebook_grid_bruteforce(rulebook, dataset, labels, votes, rule_id_to_params, rule_id_to_values, trajectories_dict, rule_parameter_result_dict=None, verbose=0):
@@ -191,6 +193,102 @@ def optimize_rulebook_grid_bruteforce_with_validation(rulebook, training_data, t
             iterator.set_description(f"New best: Train {best_score/len(training_data):.4f}, Val {best_val_score/len(validation_data):.4f}")
 
     return best_config, best_score, best_val_score
+
+
+
+def optimize_rulebook_greedy_by_priority(
+    rulebook,
+    training_data,
+    training_labels,
+    training_votes,
+    validation_data,
+    validation_labels,
+    validation_votes,
+    rule_id_to_params,
+    rule_id_to_values,
+    trajectories_dict,
+    rule_parameter_result_dict=None,
+    verbose=0
+):
+    """
+    Greedy optimization in rule priority order.
+    For each rule, try all its parameter combinations while keeping
+    previously chosen parameters fixed. Accept a change only if it
+    improves both training and validation scores.
+    """
+
+    graph = rulebook.in_place_priority_graph
+    try:
+        priority_order = list(nx.topological_sort(graph))
+    except Exception:
+        priority_order = list(graph.nodes)
+
+    if rule_parameter_result_dict is None:
+        rule_parameter_result_dict = {}
+
+    best_config = {}
+    best_train_score = evaluate_rulebook_with_cache(
+        rulebook, training_data, training_labels, training_votes,
+        rule_parameter_result_dict, trajectories_dict
+    )[0]
+    best_val_score = evaluate_rulebook_with_cache(
+        rulebook, validation_data, validation_labels, validation_votes,
+        rule_parameter_result_dict, trajectories_dict
+    )[0]
+
+    if verbose:
+        print(f"[greedy] Initial Train={best_train_score:.6f}, Val={best_val_score:.6f}")
+
+    for rule_id in priority_order:
+        if rule_id not in rule_id_to_params:
+            continue
+
+        param_names = rule_id_to_params[rule_id]
+        value_lists = rule_id_to_values.get(rule_id, {})
+        for p in param_names:
+            if p not in value_lists:
+                raise ValueError(f"No candidate values for {p} in rule {rule_id}")
+
+        combos = itertools.product(*[value_lists[p] for p in param_names])
+        combos = tqdm(list(combos), desc=f"Rule {rule_id}", leave=False, disable=not bool(verbose))
+
+        current_rule = graph.nodes[rule_id]['rule']
+        old_params = current_rule.parameters.copy()
+        best_local_params = old_params.copy()
+        local_best_train = best_train_score
+        local_best_val = best_val_score
+
+        for combo in combos:
+            trial_params = dict(zip(param_names, combo))
+            current_rule.parameters.update(trial_params)
+
+            train_score = evaluate_rulebook_with_cache(
+                rulebook, training_data, training_labels, training_votes,
+                rule_parameter_result_dict, trajectories_dict
+            )[0]
+            val_score = evaluate_rulebook_with_cache(
+                rulebook, validation_data, validation_labels, validation_votes,
+                rule_parameter_result_dict, trajectories_dict
+            )[0]
+
+            if verbose >= 2:
+                print(f"  {trial_params} -> Train={train_score:.6f}, Val={val_score:.6f}")
+
+            if train_score > local_best_train and val_score > local_best_val:
+                best_local_params = trial_params.copy()
+                local_best_train = train_score
+                local_best_val = val_score
+
+        current_rule.parameters.update(best_local_params)
+        best_config[rule_id] = best_local_params
+        best_train_score = local_best_train
+        best_val_score = local_best_val
+
+        if verbose:
+            print(f"[greedy] {rule_id} -> Train={best_train_score:.6f}, Val={best_val_score:.6f}")
+
+    return best_config, best_train_score, best_val_score
+
 
 def swap_nodes(g, u, v):
     # Create a mapping that swaps u and v labels
@@ -646,7 +744,7 @@ def group_nodes_by_level(g):
 
 
 
-def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None, max_iters=100, keep_relations=True, restricted=False):
+def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, groups=None, max_iters=100, keep_relations=True, restricted=False, fixed_level_depth=None):
     """
     Greedily swap rulebook levels in the graph. Always choose the maximum improving move.
     Stops when no move can improve the score.
@@ -654,14 +752,21 @@ def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_
 
     rb = rulebook.copy()
     g = rb.in_place_priority_graph
-    if levels is None:
-        levels = group_nodes_by_level(g)
+
+
+    levels = groups
+    fixed_levels = []
+    if fixed_level_depth is not None:
+        fixed_levels = groups[:fixed_level_depth + 1]
+        levels = groups[fixed_level_depth + 1:] # only optimize lower levels
+    
     improved = True
     iter_count = 0
     while improved and iter_count < max_iters:
         improved = False
         best_score = evaluate_rulebook_with_cache(rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
         best_rb = rb.copy()
+        best_levels = levels[:]
 
 
         if restricted:
@@ -669,7 +774,8 @@ def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_
                 # swap levels i and i+1
                 new_levels = levels[:]  # make a copy
                 new_levels[i], new_levels[i - 1] = new_levels[i - 1], new_levels[i]
-                new_g = combine_groups_in_order(g, new_levels, keep_relations)
+
+                new_g = combine_groups_in_order(g, fixed_levels + new_levels, keep_relations)
                 new_rb = rb.copy()
                 new_rb.in_place_priority_graph = new_g
 
@@ -677,6 +783,7 @@ def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_
                 if new_score > best_score:
                         best_score = new_score
                         best_rb = new_rb
+                        best_levels = new_levels
                         improved = True
 
         
@@ -686,7 +793,7 @@ def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_
                     # Swap levels i and j
                     new_levels = levels[:]
                     new_levels[i], new_levels[j] = new_levels[j], new_levels[i]
-                    new_g = combine_groups_in_order(g, new_levels, keep_relations)
+                    new_g = combine_groups_in_order(g, fixed_levels + new_levels, keep_relations)
                     new_rb = rb.copy()
                     new_rb.in_place_priority_graph = new_g
 
@@ -694,31 +801,112 @@ def greedy_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_
                     if new_score > best_score:
                         best_score = new_score
                         best_rb = new_rb
+                        best_levels = new_levels
                         improved = True
         rb = best_rb
         g = best_rb.in_place_priority_graph
-        levels = group_nodes_by_level(g)
+        levels = best_levels
                     
         iter_count += 1
 
     return rb, best_score
 
 
-def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, levels=None, keep_relations=True):
+
+
+def greedy_group_optimization_with_validation(rulebook, train_x, train_y, train_votes, val_x, val_y, val_votes, cache_dict, trajectories_dict, groups, max_iters=100, keep_relations=True, restricted=False, fixed_level_depth=None):
     """
-    Try all permutations of rulebook levels in the graph. Choose the best one.
+    Greedily swap rulebook levels in the graph. Always choose the maximum improving move.
+    Stops when no move can improve the score.
     """
 
     rb = rulebook.copy()
     g = rb.in_place_priority_graph
-    if levels is None:
-        levels = group_nodes_by_level(g)
+    levels = groups
+    fixed_levels = []
+    if fixed_level_depth is not None:
+        fixed_levels = groups[:fixed_level_depth + 1]
+        levels = groups[fixed_level_depth + 1:] # only optimize lower levels
+    improved = True
+    iter_count = 0
+    while improved and iter_count < max_iters:
+        improved = False
+        train_best_score = evaluate_rulebook_with_cache(rb, train_x, train_y, train_votes, cache_dict, trajectories_dict)[0]
+        val_best_score = evaluate_rulebook_with_cache(rb, val_x, val_y, val_votes, cache_dict, trajectories_dict)[0]
+        best_rb = rb.copy()
+        best_levels = levels[:]
+
+
+        if restricted:
+            for i in range(len(levels) - 1, 0, -1):
+                # swap levels i and i+1
+                new_levels = levels[:]  # make a copy
+                new_levels[i], new_levels[i - 1] = new_levels[i - 1], new_levels[i]
+                new_g = combine_groups_in_order(g, fixed_levels + new_levels, keep_relations)
+                new_rb = rb.copy()
+                new_rb.in_place_priority_graph = new_g
+
+                train_new_score = evaluate_rulebook_with_cache(new_rb, train_x, train_y, train_votes, cache_dict, trajectories_dict)[0]
+                val_new_score = evaluate_rulebook_with_cache(new_rb, val_x, val_y, val_votes, cache_dict, trajectories_dict)[0]
+                if train_new_score > train_best_score and val_new_score > val_best_score:
+                        train_best_score = train_new_score
+                        val_best_score = val_new_score
+                        best_rb = new_rb
+                        best_levels = new_levels
+                        improved = True
+
+        
+        else:
+            for i in range(len(levels) - 1, -1, -1):
+                for j in range(i - 1, -1, -1):
+                    # Swap levels i and j
+                    new_levels = levels[:]
+                    new_levels[i], new_levels[j] = new_levels[j], new_levels[i]
+                    new_g = combine_groups_in_order(g, fixed_levels + new_levels, keep_relations)
+                    new_rb = rb.copy()
+                    new_rb.in_place_priority_graph = new_g
+
+                    train_new_score = evaluate_rulebook_with_cache(new_rb, train_x, train_y, train_votes, cache_dict, trajectories_dict)[0]
+                    val_new_score = evaluate_rulebook_with_cache(new_rb, val_x, val_y, val_votes, cache_dict, trajectories_dict)[0]
+                    
+                    if train_new_score > train_best_score and val_new_score > val_best_score:
+                        train_best_score = train_new_score
+                        val_best_score = val_new_score
+                        best_rb = new_rb
+                        best_levels = new_levels
+                        improved = True
+        rb = best_rb
+        g = best_rb.in_place_priority_graph
+        levels = best_levels
+
+        iter_count += 1
+
+    return rb, train_best_score, val_best_score
+
+
+
+
+
+
+
+def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajectories_dict, groups, keep_relations=True, fixed_level_depth=None):
+    """
+    Try all permutations of rulebook levels in the graph. Choose the best one.
+    """
+    fixed_levels = []
+    if fixed_level_depth is not None:
+        fixed_levels = groups[:fixed_level_depth + 1]
+        groups = groups[fixed_level_depth + 1:] # only optimize lower levels
+
+    rb = rulebook.copy()
+    g = rb.in_place_priority_graph
+
     
     best_score = evaluate_rulebook_with_cache(rb, X, y, y_votes, cache_dict, trajectories_dict)[0]
     best_rb = rb.copy()
 
-    for perm in itertools.permutations(levels):
-        new_g = combine_groups_in_order(g, perm, keep_relations)
+    for perm in itertools.permutations(groups):
+        new_g = combine_groups_in_order(g, fixed_levels + list(perm), keep_relations)
         new_rb = rb.copy()
         new_rb.in_place_priority_graph = new_g
 
@@ -729,6 +917,42 @@ def brute_force_group_optimization(rulebook, X, y, y_votes, cache_dict, trajecto
             best_rb = new_rb
 
     return best_rb, best_score
+
+
+
+def brute_force_group_optimization_with_validation(rulebook, X_train, y_train, votes_train, X_val, y_val, votes_val, cache_dict, trajectories_dict, groups, keep_relations=True, fixed_level_depth=None):
+    """
+    Try all permutations of rulebook levels in the graph. Choose the best one.
+    """
+    fixed_levels = []
+    if fixed_level_depth is not None:
+        fixed_levels = groups[:fixed_level_depth + 1]
+        groups = groups[fixed_level_depth + 1:] # only optimize lower levels
+
+    rb = rulebook.copy()
+    g = rb.in_place_priority_graph
+
+    train_best_score = evaluate_rulebook_with_cache(rb, X_train, y_train, votes_train, cache_dict, trajectories_dict)[0]
+    val_best_score = evaluate_rulebook_with_cache(rb, X_val, y_val, votes_val, cache_dict, trajectories_dict)[0]
+    best_rb = rb.copy()
+
+    for perm in itertools.permutations(groups):
+        new_g = combine_groups_in_order(g, fixed_levels + list(perm), keep_relations)
+        new_rb = rb.copy()
+        new_rb.in_place_priority_graph = new_g
+
+        new_train_score = evaluate_rulebook_with_cache(new_rb, X_train, y_train, votes_train, cache_dict, trajectories_dict)[0]
+        new_val_score = evaluate_rulebook_with_cache(new_rb, X_val, y_val, votes_val, cache_dict, trajectories_dict)[0]
+
+        if new_train_score > train_best_score and new_val_score > val_best_score:
+            train_best_score = new_train_score
+            val_best_score = new_val_score
+            best_rb = new_rb
+
+    return best_rb, train_best_score, val_best_score
+
+
+
 
 
 def find_scenario_groups(rulebook, X, y, y_votes, rule_parameter_result_dict, trajectories_dict, optimization_alg, groups=None, keep_relations=True, **kwargs):
@@ -744,7 +968,7 @@ def find_scenario_groups(rulebook, X, y, y_votes, rule_parameter_result_dict, tr
 
     pbar = tqdm(total=len(scenario_to_samples), desc="Finding Groups for Scenarios", leave=False)
     for name, traj_dict in scenario_to_samples.items():
-        rulebook, score = optimization_alg(grouped_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, levels=groups, keep_relations=keep_relations, **kwargs)
+        rulebook, score = optimization_alg(grouped_rulebook, traj_dict['X'], traj_dict['y'], traj_dict['votes'], rule_parameter_result_dict, trajectories_dict, groups=groups, keep_relations=keep_relations, **kwargs)
         traj_dict['rulebook'] = rulebook
         traj_dict['score'] = score/len(traj_dict['X'])
         total += len(traj_dict['X'])
