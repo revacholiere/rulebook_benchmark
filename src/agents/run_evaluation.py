@@ -68,9 +68,15 @@ def run_evaluation(cfg, seed):
     ce_ratio = 0
     rule_violation_count = {rule: 0 for rule in rulebook.get_rule_names()}
     unique_violations = set()
+    # Sampling loop
     successful_samples = 0
+    retries = 0
     
     while successful_samples < cfg['experiment']['num_samples']:
+        if retries >= cfg['scenic']['max_retries']:
+            log.error(f"Exceeded maximum retries ({cfg['scenic']['max_retries']}). Stopping evaluation.")
+            break
+        
         ### Generate a sample ###
         log.info(f"Sample {successful_samples+1}/{cfg['experiment']['num_samples']}")
         realization = Realization()
@@ -91,7 +97,7 @@ def run_evaluation(cfg, seed):
         params['realization'] = realization
         params['POLICY'] = cfg['agent']['type']
         scenario = scenic.scenarioFromFile(cfg['scenic']['file_path'], model=model, params=params, mode2D=True)
-        scene, _ = scenario.generate()
+        #scene, _ = scenario.generate()
 
         ### Run the simulation and evaluate ###
         try:
@@ -100,12 +106,14 @@ def run_evaluation(cfg, seed):
                 timeout_exception=TimeoutError,
                 use_signals=False
             )
-            error_value, normalized_error_value, violated_rules = decorator(safe_simulate_and_eval)(simulator, scene, realization, rulebook, cfg, idx=successful_samples)
+            error_value, normalized_error_value, violated_rules = decorator(simulate_and_eval)(simulator, scenario, realization, rulebook, cfg, idx=successful_samples)
         except TimeoutError:
             log.warning(f"Simulation timeout after {cfg['scenic']['timeout']}s. Retrying...")
+            retries += 1
             continue
         except Exception as e:
             log.error(f"Simulation failed with exception: {e}")
+            retries += 1
             continue
         log.info(f"Error value: {error_value}, Normalized error value: {normalized_error_value}, Violated rules: {violated_rules}")
         avg_error_value += error_value
@@ -118,6 +126,7 @@ def run_evaluation(cfg, seed):
                 rule_violation_count[rule] += 1
         unique_violations.add(tuple(sorted(violated_rules)))
         successful_samples += 1
+        retries = 0
         
         ### Update the sampler ###
         if cfg['falsification']['active']:
@@ -131,19 +140,21 @@ def run_evaluation(cfg, seed):
     unique_violations_lists = [list(s) for s in unique_violations]
     log.info("Unique violations: " + str(unique_violations_lists))
     
-    if simulator._destroyed is False:
-        simulator.destroy()
+    #if simulator._destroyed is False:
+    #    simulator.destroy()
+    simulator.destroy()
 
-def safe_simulate_and_eval(simulator, scene, realization, rulebook, cfg, idx=0):
+def simulate_and_eval(simulator, scenario, realization, rulebook, cfg, idx=0):
     """
     Safe simulation and evaluation with timeouts and exceptions.
     """
     ### Run the simulation ###
+    scene, _ = scenario.generate()
     simulation = simulator.simulate(scene, maxSteps=cfg['scenic']['max_steps_per_simulation'], maxIterations=cfg['scenic']['max_rejection_sampling_iterations'])
     
     if not simulation:
         log.error("Simulation returned None. Retrying...")
-        return None, None, None
+        raise Exception("Simulation returned None.")
     if cfg['visualization']['record_simulation']:
         visualize_simulation(simulation, ids=cfg['visualization']['ids'], save_path=cfg['visualization']['record_dir']+cfg['agent']['type']+f'_{idx+1}.mp4')
     process_trajectory(realization, isScenic=True)
