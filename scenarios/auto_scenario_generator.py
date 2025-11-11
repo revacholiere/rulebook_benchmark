@@ -1,12 +1,33 @@
 from enum import Enum
+from itertools import product, permutations
+from collections import Counter
 import json
 import random
+import numpy as np
 
-AgentType = Enum('AgentType', 'CAR PEDESTRIAN')
-VehicleManeuver = Enum('VehicleManeuver', 'STRAIGHT LEFT_TURN RIGHT_TURN LANE_CHANGE LANE_FOLLOWING') # U_TURN
-PedestrianManeuver = Enum('PedestrianManeuver', 'CROSS_STREET WALK_ALONG_SIDEWALK')
-SpatialRelation = Enum('SpatialRelation', 'AHEAD_OF BEHIND FASTER_LANE SLOWER_LANE OPPOSITE_INTERSECTION LATERAL_INTERSECTION') # OPPOSITE_LANE
-PedestrianSpatialRelation = Enum('PedestrianSpatialRelation', 'SIDEWALK') # TR_INTER TL_INTER BR_INTER BL_INTER
+class AgentType(Enum):
+    CAR = 1
+    PEDESTRIAN = 2
+class VehicleManeuver(Enum):
+    STRAIGHT = 1
+    LEFT_TURN = 2
+    RIGHT_TURN = 3
+    LANE_CHANGE = 4
+    LANE_FOLLOWING = 5
+class PedestrianManeuver(Enum):
+    CROSS_STREET = 1
+    WALK_ALONG_SIDEWALK = 2
+class SpatialRelation(Enum):
+    AHEAD_OF = 1
+    BEHIND = 2
+    FASTER_LANE = 3
+    SLOWER_LANE = 4
+    OPPOSITE_INTERSECTION = 5
+    LATERAL_INTERSECTION = 6
+    # OPPOSITE_LANE
+class PedestrianSpatialRelation(Enum):
+    SIDEWALK = 1
+    # TR_INTER TL_INTER BR_INTER BL_INTER
 ParamToRange = {'INIT_DIST': (10, 20), 'SAFETY_DIST': (6, 10), 'BYPASS_DIST': (10, 12), 'SPEED': (6, 11), 'BRAKE': (0.5, 1.0), 'PED_LONGITUDINAL_OFFSET': (5, 15), 'PED_SPEED': (1, 3)}
 ConstantToRange = {'INTER_DIST': [15, 25], 'INIT_DIST': 10, 'PED_LATERAL_OFFSET': 8, 'PED_LONGITUDINAL_OFFSET': 30}
 
@@ -14,6 +35,7 @@ parameter_tracker = {} # dict of parameter name to (low, high)
 constant_tracker = {} # dict of constant name to value
 requirement_tracker = [] # list of requirements
 
+###### Scenario Generator ######
 def scenario_spec_checker(spec):
     # Check that ego is specified
     assert 'ego' in spec, "Ego agent must be specified in the scenario spec."
@@ -78,6 +100,8 @@ def scenario_spec_checker(spec):
             maneuver = agent_spec['maneuver']
             if spatial_relation in [SpatialRelation.AHEAD_OF, SpatialRelation.BEHIND] and maneuver == VehicleManeuver.RIGHT_TURN:
                 raise ValueError(f"Agent {agent_name} cannot have spatial relation {spatial_relation.name} while performing RIGHT_TURN maneuver when other agents are in SLOWER_LANE.")
+            
+    # TODO: see 20_12
 
 def scenario_generator(spec):
     """Given a scenario specification, generate the corresponding Scenic scenario file.
@@ -578,9 +602,9 @@ def _specification_generator(spec):
         code += f"\n"
         
     # Requirements
-    if requirement_tracker:
-        for req in requirement_tracker:
-            code += f"require {req}\n"
+    #if requirement_tracker:
+    #    for req in requirement_tracker:
+    #        code += f"require {req}\n"
             
     # Termination
     # TODO
@@ -611,6 +635,7 @@ def _recording_generator(spec):
             code += f"record {agent_name}.lane.polygon as {agent_name}LanePoly\n"
     return code
 
+###### Scenario Generation from File ######
 def generate_scenario_from_file(file):
     """Given a JSONL file containing multiple scenario specs, generate scenarios for each spec. Each line in the file should be a valid JSON object representing a scenario spec.
 
@@ -671,6 +696,7 @@ def generate_scenario_from_file(file):
             except Exception as e:
                 print(f"[Scenario {line_num}] Unexpected error: {e}")
 
+###### Random Scenario Spec Generation ######
 def generate_random_scenario_specs(
     jsonl_filename: str,
     num_vehicle_agents: int,
@@ -757,18 +783,229 @@ def generate_random_scenario_specs(
     with open(jsonl_filename, "w") as f:
         for spec in valid_scenarios:
             f.write(json.dumps(spec, default=enum_to_str) + "\n")
+
+###### Representative Scenario Generation ######
+def generate_representative_scenario_specs_with_k_center(
+    jsonl_filename: str,
+    num_vehicle_agents: int,
+    num_ped_agents: int,
+    num_scenarios: int
+):
+    np.random.seed(42)  # for reproducibility
+    
+    def encode_scenario(ego_maneuver, advs):
+        """
+        Encode one scenario into a (1+2n)-dim integer vector:
+        [ego, adv1_spa, adv1_beh, adv2_spa, adv2_beh, ...]
+        """
+        vec = [ego_maneuver.value]
+        for spa, beh in advs:
+            vec += [spa.value, beh.value]
+        return np.array(vec, dtype=int)
+    
+    def enumerate_scenarios(num_adv=3):
+        """
+        Enumerate all possible combinations of ego behavior and N adversary (spatial, behavior) pairs.
+        Returns a list of (1+2n)-dim numpy arrays.
+        """
+        all_scenarios = []
+        for ego_m in VehicleManeuver:
+            for advs in product(
+                product(SpatialRelation, VehicleManeuver),
+                repeat=num_adv,
+            ):
+                # check validity:
+                spec = {
+                    'scenario': 'temp.scenic',
+                    'map': '../../maps/Town05.xodr',
+                    'ego': {
+                        'type': AgentType.CAR,
+                        'maneuver': ego_m,
+                    },
+                    'agents': {},
+                }
+                for i, (spa, beh) in enumerate(advs):
+                    spec['agents'][f'agent{i+1}'] = {
+                        'type': AgentType.CAR,
+                        'maneuver': beh,
+                        'spatial_relation': spa,
+                    }
+                try:
+                    scenario_spec_checker(spec)
+                except ValueError as e:
+                    #print(f"Invalid spec skipped: ego {ego_m}, advs {advs}, reason: {e}")
+                    continue 
+                all_scenarios.append(encode_scenario(ego_m, advs))
+        return np.array(all_scenarios, dtype=int)
+
+    def hamming_distance_interchangeable(a, b, num_adv=3):
+        """
+        Compute Hamming distance between two scenarios ((1+2n)-dim integer vectors),
+        where adversary vehicles are treated as interchangeable.
+
+        Steps:
+        1. Compare ego behavior directly.
+        2. Compare all adversaries under all permutations.
+        3. Return the minimal total Hamming distance.
+        """
+        ego_dist = int(a[0] != b[0])
+        a_advs = np.array(a[1:]).reshape(num_adv, 2)
+        b_advs = np.array(b[1:]).reshape(num_adv, 2)
+
+        min_adv_dist = np.inf
+        for perm in permutations(range(num_adv)):
+            b_perm = b_advs[list(perm)]
+            dist = np.sum(a_advs != b_perm)
+            min_adv_dist = min(min_adv_dist, dist)
+
+        return ego_dist + min_adv_dist
+    
+    def k_center_hamming_interchangeable(X, k, num_adv=3):
+        """
+        Greedy K-center sampling using Hamming distance with interchangeable adversaries.
+        """
+        n = len(X)
+        print(f"Selecting center {1}/{k}")
+        centers = [np.random.randint(0, n)]  # randomly pick first center
+        min_dist = np.full(n, np.inf)
+
+        for j in range(1, k):
+            print(f"Selecting center {j+1}/{k}")
+            last_center = X[centers[-1]]
+
+            # Update distance to nearest selected center
+            for i in range(n):
+                d = hamming_distance_interchangeable(X[i], last_center, num_adv)
+                if d < min_dist[i]:
+                    min_dist[i] = d
+            print(f"Current largest minimum distance: {np.max(min_dist)}")
+
+            # Pick the point farthest from all selected centers. If tie, randomly pick one.
+            max_value = np.max(min_dist)
+            candidates = np.where(min_dist == max_value)[0]
+            if len(candidates) > 1:
+                next_center = np.random.choice(candidates)
+            else:
+                next_center = np.argmax(min_dist)
+            centers.append(next_center)
             
+        # Print the largest minimum distance for analysis
+        for i in range(n):
+            d = hamming_distance_interchangeable(X[i], X[centers[-1]], num_adv)
+            if d < min_dist[i]:
+                min_dist[i] = d
+        print(f"Largest minimum distance after selection: {np.max(min_dist)}")
+
+        return centers
+    
+    def evaluate_scenario_coverage(selected_scenarios, num_adv=3):
+        """
+        Analyze frequency of values across all dimensions of selected scenarios.
+        Also count how often each (adv_spa, adv_beh) pair appears.
+        """
+        ego_counts = Counter()
+        adv_spa_counts = Counter()
+        adv_beh_counts = Counter()
+        adv_pair_counts = Counter()
+
+        for s in selected_scenarios:
+            ego_counts[s[0]] += 1
+            adv_values = np.array(s[1:]).reshape(num_adv, 2)
+            for spa, beh in adv_values:
+                adv_spa_counts[spa] += 1
+                adv_beh_counts[beh] += 1
+                adv_pair_counts[(spa, beh)] += 1
+
+        def enum_name(enum_cls, val):
+            try:
+                return enum_cls(val).name
+            except ValueError:
+                return str(val)
+
+        print("=== Ego Maneuver Counts ===")
+        for k, v in sorted(ego_counts.items()):
+            print(f"{enum_name(VehicleManeuver, k)} {v}")
+        print()
+
+        print("=== Adversary Spatial Relation Counts ===")
+        for k, v in sorted(adv_spa_counts.items()):
+            print(f"{enum_name(SpatialRelation, k)} {v}")
+        print()
+
+        print("=== Adversary Maneuver Counts ===")
+        for k, v in sorted(adv_beh_counts.items()):
+            print(f"{enum_name(VehicleManeuver, k)} {v}")
+        print()
+
+        print("=== (SpatialRelation, Maneuver) Pair Counts ===")
+        total = sum(adv_pair_counts.values())
+        unsampled_pairs = 0
+        for spa_idx in range(len(SpatialRelation)):
+            for beh_idx in range(len(VehicleManeuver)):
+                v = adv_pair_counts.get((spa_idx + 1, beh_idx + 1), 0)
+                if v == 0:
+                    unsampled_pairs += 1
+                spa_name = enum_name(SpatialRelation, spa_idx + 1)
+                beh_name = enum_name(VehicleManeuver, beh_idx + 1)
+                print(f"{spa_name} {beh_name} {v}")
+        print("(SpatialRelation, Maneuver) Pair Coverage:", (len(SpatialRelation) * len(VehicleManeuver) - unsampled_pairs), "/", (len(SpatialRelation) * len(VehicleManeuver) - 2))
+        
+    all_scenarios = enumerate_scenarios(num_adv=num_vehicle_agents)
+    print(f"Total enumerated scenarios: {all_scenarios.shape[0]}, each of dimension {all_scenarios.shape[1]}")
+    selected_indices = k_center_hamming_interchangeable(all_scenarios, num_scenarios, num_adv=num_vehicle_agents)
+    selected_scenarios = all_scenarios[selected_indices]
+    print(f"Selected scenarios:\n{selected_scenarios}, total {len(selected_scenarios)}")
+    evaluate_scenario_coverage(selected_scenarios, num_adv=num_vehicle_agents)
+    
+    # Write selected scenario specs to JSONL file
+    def decode_scenario(vec, num_adv=3):
+        ego_maneuver = VehicleManeuver(vec[0])
+        advs = []
+        for i in range(num_adv):
+            spa = SpatialRelation(vec[1 + 2*i])
+            beh = VehicleManeuver(vec[1 + 2*i + 1])
+            advs.append((spa, beh))
+        return ego_maneuver, advs
+    
+    with open(jsonl_filename, "w") as f:
+        for j, vec in enumerate(selected_scenarios):
+            ego_maneuver, advs = decode_scenario(vec, num_adv=num_vehicle_agents)
+            spec = {
+                "scenario": f"basic_gen/representative{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
+                "map": "../../maps/Town05.xodr",
+                "ego": {
+                    "type": AgentType.CAR,
+                    "maneuver": ego_maneuver,
+                },
+                "agents": {}
+            }
+            for i, (spa, beh) in enumerate(advs):
+                spec["agents"][f"car{i+1}"] = {
+                    "type": AgentType.CAR,
+                    "maneuver": beh,
+                    "spatial_relation": spa,
+                }
+            f.write(json.dumps(spec, default=lambda o: o.name) + "\n")
+
 if __name__ == "__main__":
+    # Example: Generate representative scenario specs using k-center algorithm and save to a JSONL file
+    #generate_representative_scenario_specs_with_k_center(
+    #    jsonl_filename="basic_specs/representative_scenarios_20.jsonl",
+    #    num_vehicle_agents=2,
+    #    num_ped_agents=0,
+    #    num_scenarios=100
+    #)
+    
     # Example: Generate random scenario specs and save to a JSONL file
-    generate_random_scenario_specs(
-        jsonl_filename="basic_specs/basic_scenarios_10.jsonl",
-        num_vehicle_agents=1,
-        num_ped_agents=0,
-        num_scenarios=50
-    )
+    #generate_random_scenario_specs(
+    #    jsonl_filename="basic_specs/basic_scenarios_20.jsonl",
+    #    num_vehicle_agents=2,
+    #    num_ped_agents=0,
+    #    num_scenarios=50
+    #)
     
     # Example: Generate Scenic programs from a JSONL file containing multiple specs
-    generate_scenario_from_file('basic_specs/basic_scenarios_10.jsonl')
+    generate_scenario_from_file('basic_specs/representative_scenarios_20.jsonl')
     
     # Example scenario spec
     #spec = {
