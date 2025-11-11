@@ -58,15 +58,10 @@ behavior WaymoBehavior(trajectory):
     try:
         do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_PROCEED_SPEED, trajectory=trajectory) until (distance to pedestrian) < globalParameters.PEDESTRIAN_CLEAR_DIST
         do Stop() for 2 seconds
-
         do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_PROCEED_SPEED, trajectory=trajectory) until (distance to intersection) == 0 
-
         do Stop() for 2 seconds
-
         do FollowTrajectoryBehavior(target_speed=globalParameters.WAYMO_PROCEED_SPEED, trajectory=trajectory) for 1.5 seconds
-
         do Stop()
-
 
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.WAYMO_BRAKE)
@@ -97,7 +92,6 @@ advLeftManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, adv
 advLeftSpawnPt = new OrientedPoint in advLeftInitLane.centerline
 advLeftTrajectory = [advLeftInitLane, advLeftManeuver.connectingLane, advLeftManeuver.endLane]
 
-
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
@@ -105,17 +99,27 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 adversarySpawnPt = egoInitLane.centerline[0]
 adversaryTrajectory = egoTrajectory # Follows the same path as ego
 
-
-
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-
-ego = new Car at egoSpawnPt,
-    with blueprint MODEL,
-    with behavior WaymoBehavior(egoTrajectory)
-
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    behavior EgoPPOBehavior(trajectory):
+        do MetaDrivePPOPolicyBehavior(trajectory) until (distance to pedestrian) < globalParameters.PEDESTRIAN_CLEAR_DIST
+        do Stop() for 2 seconds
+        do MetaDrivePPOPolicyBehavior(trajectory) until (distance to intersection) == 0 
+        do Stop() for 2 seconds
+        do MetaDrivePPOPolicyBehavior(trajectory) for 1.5 seconds
+        do Stop()
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior EgoPPOBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior WaymoBehavior(egoTrajectory)
 
 adversary = new Car at adversarySpawnPt,
     with blueprint MODEL,
@@ -130,7 +134,6 @@ pedestrian = new Pedestrian in ego.laneGroup.sidewalk,
     with behavior PedestrianBehavior(),
     facing 90 deg relative to ego
 
-
 #################################
 # REQUIREMENTS                  #
 #################################
@@ -139,3 +142,7 @@ require adversary.lane is ego.lane
 require EGO_INTERSECTION_DIST[0] <= (distance from ego to intersection) <= EGO_INTERSECTION_DIST[1]
 require PED_INTERSECTION_DIST[0] <= (distance from pedestrian to intersection) <= PED_INTERSECTION_DIST[1]
 require ADV_INTERSECTION_DIST[0] <= (distance from adversaryLeft to intersection) <= ADV_INTERSECTION_DIST[1]
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

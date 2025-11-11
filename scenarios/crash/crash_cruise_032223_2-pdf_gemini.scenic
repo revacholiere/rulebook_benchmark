@@ -66,13 +66,19 @@ truckSpawnPt = new OrientedPoint in truckLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint CRUISE_AV_MODEL,
-    with behavior EgoBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior EgoBehavior(egoTrajectory)
 
 truck = new Car at truckSpawnPt offset by (globalParameters.TRUCK_OFFSET_X, 0),
     with blueprint TRUCK_MODEL # Truck is stationary, double-parked
-
 
 # Dolly is positioned behind the truck
 dollySpawnPt = new OrientedPoint behind truck by globalParameters.DOLLY_ATTACH_DIST
@@ -95,3 +101,7 @@ require (distance from truck to intersection) < TRUCK_INTERSECTION_DISTANCE
 #terminate when (distance from ego to dolly) < (ego.length + dolly.length) / 2
 # Terminate if ego travels too far without incident (to prevent infinite simulation)
 #terminate when (distance from ego to egoSpawnPt) > TERM_TRAVELED_DIST
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

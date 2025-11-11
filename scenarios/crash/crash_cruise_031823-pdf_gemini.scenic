@@ -68,9 +68,16 @@ advSpawnPt = new OrientedPoint in advInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint CRUISE_AV_MODEL,
-    with behavior CruiseAVBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior CruiseAVBehavior(egoTrajectory)
 
 mercedes_sedan = new Car at advSpawnPt,
     with blueprint MERCEDES_MODEL,
@@ -81,3 +88,7 @@ require ADV_INIT_DIST_RANGE[0] <= (distance from mercedes_sedan to intersection)
 
 #terminate when (distance to mercedes_sedan) < CRASH_DIST
 #terminate when (distance to egoSpawnPt) > TERM_DIST or (distance from mercedes_sedan to advSpawnPt) > TERM_DIST
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoManeuver.endLane as egoReachedGoal

@@ -25,8 +25,6 @@ param ZOOX_BRAKE = VerifaiRange(0.7, 1.0)
 param BICYCLE_SPEED = VerifaiRange(2.0 , 3.0)
 ZOOX_BRAKE_DIST = 5 # Distance from intersection to start braking
 
-
-
 param SAFETY_DIST = VerifaiRange(3, 5)
 param EGO_BRAKE = VerifaiRange(0.5, 1.0)
 CRASH_DIST = 1 # Distance for collision detection
@@ -46,7 +44,7 @@ behavior ZooxBehavior(trajectory):
             until (distance to intersection) < ZOOX_BRAKE_DIST
         take SetBrakeAction(globalParameters.ZOOX_BRAKE)
         #take SetSpeedAction(0) # Attempt to fully stop
-    interrupt when withinDistanceToAnyObjs(self, SAFETY_DIST):
+    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.EGO_BRAKE)
 
 behavior BicycleBehavior():
@@ -101,9 +99,16 @@ rightManeuverLane = egoRightManeuver.endLane
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint ZOOX_MODEL,
-    with behavior ZooxBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint ZOOX_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint ZOOX_MODEL,
+        with behavior ZooxBehavior(egoTrajectory)
 
 bicycle = new Bicycle in rightManeuverLane.group.sidewalk,
     facing toward ego,
@@ -113,3 +118,7 @@ bicycle = new Bicycle in rightManeuverLane.group.sidewalk,
 require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
 require BICYCLE_INIT_DIST[0] <= (distance from bicycle to intersection) <= BICYCLE_INIT_DIST[1]
 terminate when (distance to egoSpawnPt) > TERM_DIST
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

@@ -64,14 +64,24 @@ egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 
 advInitLane = egoManeuver.endLane
 
-
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car in egoInitLane,
-    with blueprint MODEL,
-    with behavior CruiseAVBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    behavior EgoPPOBehavior(trajectory):
+        for i in range(globalParameters.AV_WAIT_TIME):
+            wait
+        do MetaDrivePPOPolicyBehavior(trajectory)
+    ego = new MetaDrivePPOPolicyCar in egoInitLane,
+        with blueprint MODEL,
+        with behavior EgoPPOBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car in egoInitLane,
+        with blueprint MODEL,
+        with behavior CruiseAVBehavior(egoTrajectory)
 
 adversary = new Car in advInitLane,
     facing toward ego,
@@ -84,3 +94,7 @@ adversary = new Car in advInitLane,
 
 require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
 require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

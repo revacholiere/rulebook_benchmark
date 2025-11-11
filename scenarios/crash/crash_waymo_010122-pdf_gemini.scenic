@@ -79,9 +79,16 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint WAYMO_MODEL,
-    with behavior WaymoBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint WAYMO_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint WAYMO_MODEL,
+        with behavior WaymoBehavior(egoTrajectory)
 
 adversary = new Car at advSpawnPt,
     with blueprint PASSENGER_MODEL,
@@ -100,3 +107,6 @@ require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INI
 #terminate when (distance to adversary) < (ego.length + adversary.length) / 2
 #terminate when (distance to egoSpawnPt) > TERM_DIST
 
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

@@ -55,8 +55,6 @@ behavior ZooxBehavior(trajectory):
     interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):
         take SetBrakeAction(globalParameters.ZOX_BRAKE)
 
-
-
 #################################
 # SPATIAL RELATIONS             #
 #################################
@@ -73,13 +71,21 @@ passengerSpawnPt = new OrientedPoint following roadDirection from zooxSpawnPt fo
 crossTrafficInitLane = Uniform(*filter(lambda l: any([m.type is ManeuverType.STRAIGHT for m in l.maneuvers]) and all([m.type is not ManeuverType.RIGHT_TURN for m in l.maneuvers]) and all([sec._fasterLane is None for sec in l.sections]), intersection.incomingLanes))
 crossTrafficManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, crossTrafficInitLane.maneuvers))
 crossTrafficSpawnPt = new OrientedPoint in crossTrafficInitLane.centerline
+
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at zooxSpawnPt,
-    with blueprint ZOX_MODEL,
-    with behavior ZooxBehavior(zooxTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at zooxSpawnPt,
+        with blueprint ZOX_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(zooxTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at zooxSpawnPt,
+        with blueprint ZOX_MODEL,
+        with behavior ZooxBehavior(zooxTrajectory)
 
 cross_traffic = new Car at crossTrafficSpawnPt,
     with blueprint CROSS_TRAFFIC_MODEL,
@@ -96,3 +102,7 @@ passenger = new Car at passengerSpawnPt,
 require ego.lane is passenger.lane
 require ZOOX_DIST_TO_INTERSECTION[0] < (distance to intersection) < ZOOX_DIST_TO_INTERSECTION[1]
 require CROSS_DIST_TO_INTERSECTION[0] < (distance from cross_traffic to intersection) < CROSS_DIST_TO_INTERSECTION[1]
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in zooxTrajectory[-1] as egoReachedGoal

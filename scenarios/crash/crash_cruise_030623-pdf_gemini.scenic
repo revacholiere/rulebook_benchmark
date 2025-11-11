@@ -66,15 +66,24 @@ egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.LEFT_TURN, egoIni
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 
-
-
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint CRUISE_AV_MODEL,
-    with behavior EgoBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    behavior EgoPPOBehavior(trajectory):
+        for i in range(30):
+            wait
+        do MetaDrivePPOPolicyBehavior(trajectory)
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior EgoPPOBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior EgoBehavior(egoTrajectory)
 
 
 advInitLane = ego.laneSection.slowerLane.lane
@@ -92,3 +101,7 @@ require ADV_DIST_TO_INTERSECTION[0] <= (distance from adversary to intersection)
 
 #terminate when (distance to adversary) < (ego.length + adversary.length) / 2
 #terminate when (distance from ego to egoSpawnPt) > TERM_DIST
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

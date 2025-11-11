@@ -87,7 +87,7 @@ require (distance to intersection) < INIT_DIST
 require (distance from adversary to intersection) < INIT_DIST
 
 # The scenario terminates upon contact between the Waymo AV and the passenger vehicle.
-terminate when (distance to adversary) < (ego.length + adversary.length) / 2 + 0.01
+#terminate when (distance to adversary) < (ego.length + adversary.length) / 2 + 0.01
 # Secondary termination condition to prevent infinite simulations.
 terminate when (distance to egoSpawnPt) > TERM_DIST
 

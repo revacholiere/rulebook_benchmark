@@ -68,9 +68,16 @@ toyotaSpawnPt = new OrientedPoint in toyotaInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at avSpawnPt,
-    with blueprint AV_MODEL,
-    with behavior AVBehavior(avTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at avSpawnPt,
+        with blueprint AV_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(avTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at avSpawnPt,
+        with blueprint AV_MODEL,
+        with behavior AVBehavior(avTrajectory)
 
 toyota = new Car at (toyotaSpawnPt offset by (globalParameters.TOYOTA_X_OFFSET, 0)),
     with blueprint TOYOTA_MODEL,
@@ -85,3 +92,6 @@ require distance to intersection < distance from toyota to intersection
 require AV_INIT_DIST_TO_INTERSECTION[0] <= (distance to intersection) <= AV_INIT_DIST_TO_INTERSECTION[1]
 require TERM_DIST - 5 < distance from ego to toyota < TERM_DIST
 
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in avTrajectory[-1] as egoReachedGoal

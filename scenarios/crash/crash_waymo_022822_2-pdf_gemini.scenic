@@ -64,6 +64,7 @@ behavior PedestrianBehavior():
     while (distance from self to ego) > globalParameters.PED_YIELD_DIST + 3:
         wait
     take SetWalkingSpeedAction(globalParameters.PED_SPEED)
+
 #################################
 # SPATIAL RELATIONS             #
 #################################
@@ -83,9 +84,16 @@ pedSidewalk = pedLane.group.sidewalk
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at waymoSpawnPt,
-    with blueprint MODEL,
-    with behavior WaymoBehavior(waymoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at waymoSpawnPt,
+        with blueprint MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(waymoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at waymoSpawnPt,
+        with blueprint MODEL,
+        with behavior WaymoBehavior(waymoTrajectory)
 
 adversary = new Car at passengerSpawnPt,
     with blueprint PASSENGER_MODEL,
@@ -104,3 +112,6 @@ require INIT_DIST_TO_INTERSECTION[0]< (distance to intersection) < INIT_DIST_TO_
 require (distance from pedestrian to intersection) < PED_DIST_TO_INTERSECTION
 require ego.lane is adversary.lane
 
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in waymoTrajectory[-1] as egoReachedGoal

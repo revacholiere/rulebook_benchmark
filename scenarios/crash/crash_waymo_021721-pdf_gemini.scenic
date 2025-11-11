@@ -46,16 +46,13 @@ behavior Stop():
     while True:
         take SetThrottleAction(0.0)
         take SetBrakeAction(1.0)
-        
-
-
+     
 behavior WaymoAVBehavior(trajectory):
     try:
         do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED_ENTERING, trajectory=trajectory) until (distance to intersection) < globalParameters.EGO_YIELD_DIST
         do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SLOW_SPEED, trajectory=trajectory) until (distance to frontAdv) < globalParameters.SAFETY_DIST_EGO_TO_FRONT
         do Stop() until (distance to frontAdv) >= globalParameters.SAFETY_DIST_EGO_TO_FRONT
         do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SLOW_SPEED, trajectory=trajectory)
-
 
     # Waymo AV stops again when the front adversary begins its left turn directly in front
     interrupt when (distance to frontAdv) < globalParameters.SAFETY_DIST:
@@ -67,7 +64,6 @@ behavior FrontAdvBehavior(trajectory):
 behavior RearAdvBehavior():
     do FollowLaneBehavior(target_speed=globalParameters.REAR_ADV_SPEED) until (distance from self to ego) < CRASH_DIST
     do Stop()
-
 
 #################################
 # SPATIAL RELATIONS             #
@@ -97,9 +93,21 @@ advRearSpawnPt = new OrientedPoint following roadDirection from egoSpawnPt for g
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint MODEL,
-    with behavior WaymoAVBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    behavior EgoPPOBehavior(trajectory):
+        do MetaDrivePPOPolicyBehavior(egoTrajectory) until (distance to intersection) < globalParameters.EGO_YIELD_DIST
+        do MetaDrivePPOPolicyBehavior(egoTrajectory) until (distance to frontAdv) < globalParameters.SAFETY_DIST_EGO_TO_FRONT
+        do Stop() until (distance to frontAdv) >= globalParameters.SAFETY_DIST_EGO_TO_FRONT
+        do MetaDrivePPOPolicyBehavior(egoTrajectory)
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior EgoPPOBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior WaymoAVBehavior(egoTrajectory)
 
 frontAdv = new Car at advRightSpawnPt,
     with blueprint MODEL,
@@ -117,6 +125,6 @@ require rearAdv.lane is ego.lane
 require distance from ego to intersection < EGO_INIT_POS_DIST_FROM_INTERSECTION
 require distance from frontAdv to intersection < FRONT_ADV_INIT_POS_DIST_FROM_INTERSECTION
 
-#################################
-# TERMINATION CONDITIONS        #
-#################################
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

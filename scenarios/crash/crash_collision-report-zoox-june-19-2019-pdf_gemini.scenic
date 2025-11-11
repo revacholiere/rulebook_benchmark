@@ -72,9 +72,16 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint ZOOX_MODEL,
-    with behavior ZooxBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint ZOOX_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint ZOOX_MODEL,
+        with behavior ZooxBehavior(egoTrajectory)
 
 adversary = new Bicycle in advSidewalk,
     facing toward ego,
@@ -88,6 +95,9 @@ adversary = new Bicycle in advSidewalk,
 require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
 require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]
 
-
-terminate when (distance to adversary) < COLLISION_DIST
+#terminate when (distance to adversary) < COLLISION_DIST
 terminate when (distance to egoSpawnPt) > TERM_DIST
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

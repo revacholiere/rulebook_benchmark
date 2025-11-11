@@ -45,9 +45,6 @@ behavior AdversaryBehavior(trajectory):
         take SetThrottleAction(1.0), SetSteerAction(0.0)
         wait
 
-
-
-
 #################################
 # SPATIAL RELATIONS             #
 #################################
@@ -73,9 +70,16 @@ advTrajectory = [advOppositeManeuver.startLane, advOppositeManeuver.connectingLa
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint ZOX_MODEL,
-    with behavior ZooxBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint ZOX_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint ZOX_MODEL,
+        with behavior ZooxBehavior(egoTrajectory)
 
 adversary = new Car in advInitLane.centerline,
     with blueprint ADV_MODEL,
@@ -92,3 +96,6 @@ require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INI
 #terminate when (distance to adversary) < (ego.length + adversary.length) * COLLISION_THRESHOLD_FACTOR
 #terminate when (distance to egoSpawnPt) > TERM_DIST
 
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

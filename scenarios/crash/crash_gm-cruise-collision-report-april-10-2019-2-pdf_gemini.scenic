@@ -89,17 +89,24 @@ adv1Maneuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, adv1En
 egoTrajectory = [egoInitLane, egoManeuver.connectingLane, egoManeuver.endLane]
 start = new OrientedPoint on egoInitLane.centerline
 
-
-
-
 #################################
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car in egoInitLane.centerline,
-    with blueprint MODEL,
-    with behavior EgoBehavior(egoTrajectory)
-
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    behavior EgoPPOBehavior(trajectory):
+        do MetaDrivePPOPolicyBehavior(trajectory) until (distance to intersection) < globalParameters.EGO_APPROACH_DIST
+        do StoppingBehavior() for 2 seconds
+        do MetaDrivePPOPolicyBehavior(trajectory)
+    ego = new MetaDrivePPOPolicyCar in egoInitLane.centerline,
+        with blueprint MODEL,
+        with behavior EgoPPOBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car in egoInitLane.centerline,
+        with blueprint MODEL,
+        with behavior EgoBehavior(egoTrajectory)
 
 # Adversary 1's initial lane and trajectory (straight, to ego's left)
 # Assumes adv1 is in the lane to the left (fasterLane) of ego's lane.
@@ -130,3 +137,7 @@ adversary2 = new Car in not visible egoInitLane.centerline,
 require EGO_INTERSECTION_DIST - 10 < (distance to intersection) < EGO_INTERSECTION_DIST
 require ADV1_INTERSECTION_DIST - 10 < (distance from adversary1 to intersection) < ADV1_INTERSECTION_DIST
 require ADV2_INTERSECTION_DIST - 10 < (distance from adversary2 to intersection) < ADV2_INTERSECTION_DIST
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

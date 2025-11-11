@@ -99,9 +99,16 @@ egoSpawnPt = new OrientedPoint in egoInitLane.centerline
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint MODEL,
-    with behavior CruiseAVBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint MODEL,
+        with behavior CruiseAVBehavior(egoTrajectory)
 
 advSpawnPt = new OrientedPoint following roadDirection from ego for globalParameters.ADVERSARY_DIST
 
@@ -121,3 +128,7 @@ cyclist = new Bicycle at (egoSpawnPt offset by (-10, globalParameters.BIKE_OFFSE
 
 require distance to intersection < EGO_INIT_DIST_TO_INTERSECTION
 # Ensure the cyclist is actually crossing the ego's path (not just parallel)
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal

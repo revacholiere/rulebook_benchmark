@@ -101,9 +101,16 @@ pedSpawnPt = new OrientedPoint on egoLaneAfterIntersection.group.sidewalk
 # SCENARIO SPECIFICATION        #
 #################################
 
-ego = new Car at egoSpawnPt,
-    with blueprint CRUISE_AV_MODEL,
-    with behavior EgoBehavior(egoTrajectory)
+if globalParameters.POLICY == 'metadrive_ppo' or globalParameters.POLICY == 'ppo_with_built_in':
+    from metadrive_expert import MetaDrivePPOPolicyCar, MetaDrivePPOPolicyBehavior, MetaDrivePPOUpdateState
+    ego = new MetaDrivePPOPolicyCar at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior MetaDrivePPOPolicyBehavior(egoTrajectory)
+    require monitor MetaDrivePPOUpdateState()
+else:
+    ego = new Car at egoSpawnPt,
+        with blueprint CRUISE_AV_MODEL,
+        with behavior EgoBehavior(egoTrajectory)
 
 adversary = new Car at advSpawnPt,
     with blueprint ADV_MODEL,
@@ -121,3 +128,7 @@ pedestrian = new Pedestrian at pedSpawnPt,
 require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]
 require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]
 require PED_INIT_DIST[0] <= (distance from pedestrian to intersection) <= PED_INIT_DIST[1]
+
+from rulebook_benchmark import bench
+require monitor bench.bench()
+record ego in egoTrajectory[-1] as egoReachedGoal
