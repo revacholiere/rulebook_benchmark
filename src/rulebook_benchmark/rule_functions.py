@@ -263,6 +263,7 @@ def vru_ttc(handler, step, threshold=1.0):
     ego_state = pool.ego_state
     ego_velocity = ego_state.velocity
     ego_position = ego_state.position
+    ego_polygon = ego_state.polygon.convex_hull # comment/uncomment
     
     violation = 0
     
@@ -273,7 +274,7 @@ def vru_ttc(handler, step, threshold=1.0):
             continue
         
         v_rel = (obj_velocity[0] - ego_velocity[0], obj_velocity[1] - ego_velocity[1])
-        ttc = continuous_ttc(ego_state.coords_np, state.coords_np, v_rel, threshold)
+        ttc = continuous_ttc(ego_polygon.exterior.coords[:-1], state.polygon.convex_hull.exterior.coords[:-1], v_rel, threshold)
         if ttc is not None:
             violation = max(violation, threshold - ttc)
 
@@ -286,13 +287,14 @@ def vehicle_ttc(handler, step, threshold=0.8):
     ego_velocity = ego_state.velocity
     ego_position = ego_state.position
     ego_polygon = ego_state.polygon
-    
+    ego_polygon = ego_polygon.convex_hull # comment/uncomment
     violation = 0
     
     for state in pool.other_vehicle_states:
 
         obj_velocity = state.velocity
         obj_polygon = state.polygon
+        obj_polygon = obj_polygon.convex_hull # comment/uncomment
         obj_pos = state.position
         
         if not early_ttc(ego_position, ego_velocity, obj_pos, obj_velocity, threshold):
@@ -401,6 +403,30 @@ def correct_side(handler, step, relax_at_intersections=False): # use relax_at_in
     ego_violation_area = ego_polygon.intersection(pure_incorrect_area).area
 
     return ego_violation_area
+
+def correct_side_alt(handler, step, relax_at_intersections=False, fine_grained=True): # use relax_at_intersections if your lane polygons do not cover all correct sides at intersections
+    ego_state = handler(step).ego_state
+
+    isScenic = handler.realization.isScenic
+    rot = 0
+    ego_lane = ego_state.lane
+
+    if isScenic:
+        rot = np.pi/2
+
+    if ego_lane is None or handler.realization.network.intersectionAt(ego_state.position) is not None and relax_at_intersections:
+        return 0
+
+    ego_lane_heading = ego_lane.orientation.value(ego_state.position) + rot
+
+    if math.cos(ego_lane_heading - ego_state.orientation.yaw) < 0:
+        if fine_grained:
+            return shapely.intersection(ego_state.polygon, ego_lane.polygon).area
+        return 1
+    else:
+        return 0
+
+f7_alt = Rule(correct_side_alt, sum, relax_at_intersections=True, fine_grained=True)
 
 f7 = Rule(correct_side, sum, relax_at_intersections=True)
 
@@ -545,12 +571,17 @@ f12 = Rule(side_clearance, max, left=True, threshold=0.8)
 
 f13 = Rule(side_clearance, max, left=False, threshold=0.8)
 
+f11_sum = Rule(front_clearance, sum, threshold=0.8)
+f12_sum = Rule(side_clearance, sum, left=True, threshold=0.8)
+f13_sum = Rule(side_clearance, sum, left=False, threshold=0.8)
 
 
 
 
 
-def clearance_vector_based(handler, step, threshold=0.8, front_angle=math.radians(30), side="front"):
+
+def clearance_vector_based(handler, step, threshold=0.8, side_angle=90, side="front"):
+    side_angle = math.radians(side_angle)
     pool = handler(step)
     ego_state = pool.ego_state
     states = pool.vehicles_in_proximity
@@ -562,14 +593,14 @@ def clearance_vector_based(handler, step, threshold=0.8, front_angle=math.radian
     for state in states:
         state_vector = normalize_vector(np.array([math.cos(state.orientation.yaw), math.sin(state.orientation.yaw)]))
         angle = angle_between(ego_heading_vector, state_vector)
-        if (abs(angle) <= front_angle / 2 and side == "front") or (angle < 0 and side == "right") or (angle >= 0 and side == "left"):
+        if (abs(angle) <= side_angle / 2 and side == "front") or (-side_angle * 3/2 < angle < -side_angle/2 and side == "right") or (side_angle * 3/2 > angle > side_angle/2 and side == "left"):
             violation = max(violation, threshold - pool.distance(state))
 
     return violation
 
-f11_v = Rule(clearance_vector_based, max, threshold=0.8)
-f12_v = Rule(clearance_vector_based, max, side="left", threshold=0.8)
-f13_v = Rule(clearance_vector_based, max, side="right", threshold=0.8)
+f11_v = Rule(clearance_vector_based, max, threshold=0.8, side_angle=90, side="front")
+f12_v = Rule(clearance_vector_based, max, side="left", threshold=0.8, side_angle=90)
+f13_v = Rule(clearance_vector_based, max, side="right", threshold=0.8, side_angle=90)
 
 '''
 

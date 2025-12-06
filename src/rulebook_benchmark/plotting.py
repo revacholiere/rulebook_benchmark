@@ -4,7 +4,7 @@ from matplotlib import animation
 import numpy as np
 from matplotlib.patches import Circle
 
-def animate_realization(realization, dpi=100, interval=100, margin=50, buffer=0.5):
+def animate_realization(realization, dpi=100, interval=100, margin=50, buffer=0.5, show_step=True):
     fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
     
 
@@ -38,6 +38,12 @@ def animate_realization(realization, dpi=100, interval=100, margin=50, buffer=0.
     lane_arrow = [ax.arrow(0, 0, 0, 0, head_width=2, head_length=4, fc="yellow", ec="yellow")]
     text = ax.text(0, 0, "", fontsize=8, color="red")
 
+    # Optional step display (in axes fraction coords so it stays in corner)
+    if show_step:
+        step_text = ax.text(0.02, 0.95, "", transform=ax.transAxes, fontsize=8, color="black")
+    else:
+        step_text = None
+
     ax.set_aspect("equal")
     ax.set_xticks([])
     ax.set_yticks([])
@@ -47,7 +53,10 @@ def animate_realization(realization, dpi=100, interval=100, margin=50, buffer=0.
         for patch in patches:
             patch.set_xy(dummy)
         ego_lane_patch.set_xy(dummy)
-        return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], text]
+        if show_step:
+            step_text.set_text("")
+            return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], ego_buffer, text, step_text]
+        return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], ego_buffer, text]
 
     def update(frame):
         ws = realization.get_world_state(min(frame, len(realization) - 1))
@@ -90,7 +99,12 @@ def animate_realization(realization, dpi=100, interval=100, margin=50, buffer=0.
         ax.set_xlim(cx - margin, cx + margin)
         ax.set_ylim(cy - margin, cy + margin)
 
-        return patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], ego_buffer, text]
+        ret = patches + [ego_lane_patch, ego_arrow[0], lane_arrow[0], ego_buffer, text]
+        if show_step:
+            step_text.set_text(f"Step: {frame}")
+            ret.append(step_text)
+
+        return ret
 
     max_frames = len(realization)
     anim = animation.FuncAnimation(fig, update, frames=max_frames,
@@ -98,8 +112,10 @@ def animate_realization(realization, dpi=100, interval=100, margin=50, buffer=0.
     return anim
 
 
+
+
 def compare_realizations_gif(realization_model_pref, realization_human_pref, reason, agreement,
-                             dpi=100, interval=100, margin=50, buffer=0.5):
+                                dpi=100, interval=100, margin=50, buffer=0.5, show_step = True):
     fig, axes = plt.subplots(1, 2, figsize=(12, 6), dpi=dpi)
     colors = {"Car": "blue", "Truck": "yellow", "Pedestrian": "purple", "Bicycle": "green"}
     patches1, patches2 = [], []
@@ -107,10 +123,10 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
 
     for lane in realization_human_pref.network.lanes:
         axes[0].add_patch(Polygon(lane.polygon.exterior.coords[:-1], closed=True,
-                                  facecolor="lightgray", edgecolor="black", alpha=0.5))
+                                    facecolor="lightgray", edgecolor="black", alpha=0.5))
     for lane in realization_model_pref.network.lanes:
         axes[1].add_patch(Polygon(lane.polygon.exterior.coords[:-1], closed=True,
-                                  facecolor="lightgray", edgecolor="black", alpha=0.5))
+                                    facecolor="lightgray", edgecolor="black", alpha=0.5))
 
     ego_lane_patch1 = Polygon(dummy, closed=True, facecolor="yellow", alpha=0.3)
     ego_lane_patch2 = Polygon(dummy, closed=True, facecolor="yellow", alpha=0.3)
@@ -141,6 +157,13 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
     text1 = axes[0].text(0, 0, "", fontsize=8, color="red")
     text2 = axes[1].text(0, 0, "", fontsize=8, color="red")
 
+    # Optional step display (in axes fraction coords so it stays in corner)
+    if show_step:
+        step_text1 = axes[0].text(0.02, 0.95, "", transform=axes[0].transAxes, fontsize=8, color="black")
+        step_text2 = axes[1].text(0.02, 0.95, "", transform=axes[1].transAxes, fontsize=8, color="black")
+    else:
+        step_text1 = step_text2 = None
+
     axes[0].set_title("Human Preference - Agreement: " + str(agreement))
     axes[1].set_title("Model Preference - Reason: " + reason)
     for ax in axes:
@@ -154,10 +177,15 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
             patch.set_xy(dummy)
         ego_lane_patch1.set_xy(dummy)
         ego_lane_patch2.set_xy(dummy)
-        return patches1 + patches2 + [ego_lane_patch1, ego_lane_patch2,
-                                      ego_arrow1[0], ego_arrow2[0],
-                                      lane_arrow1[0], lane_arrow2[0],
-                                      text1, text2]
+        ret = patches1 + patches2 + [ego_lane_patch1, ego_lane_patch2,
+                                        ego_arrow1[0], ego_arrow2[0],
+                                        lane_arrow1[0], lane_arrow2[0],
+                                        text1, text2]
+        if show_step:
+            step_text1.set_text("")
+            step_text2.set_text("")
+            ret += [step_text1, step_text2]
+        return ret
 
     def update(frame):
         # Human side
@@ -173,7 +201,7 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
             lane_arrow1[0].remove()
             ldx1, ldy1 = 8 * np.cos(lane_yaw1), 8 * np.sin(lane_yaw1)
             lane_arrow1[0] = axes[0].arrow(ego_pos1[0], ego_pos1[1], ldx1, ldy1,
-                                           head_width=2, head_length=4, fc="yellow", ec="yellow")
+                                            head_width=2, head_length=4, fc="yellow", ec="yellow")
         else:
             ego_lane_patch1.set_xy(dummy)
             lane_arrow1[0].set_visible(False)
@@ -184,7 +212,7 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
         ego_arrow1[0].remove()
         dx1, dy1 = 8 * np.cos(ego_yaw1), 8 * np.sin(ego_yaw1)
         ego_arrow1[0] = axes[0].arrow(ego_pos1[0], ego_pos1[1], dx1, dy1,
-                                      head_width=2, head_length=4, fc="red", ec="red")
+                                        head_width=2, head_length=4, fc="red", ec="red")
         text1.set_text(f"{ego_yaw1:.2f} rad")
         text1.set_position((ego_pos1[0] + dx1 + 2, ego_pos1[1] + dy1 + 2))
         axes[0].set_xlim(ego_pos1[0] - margin, ego_pos1[0] + margin)
@@ -203,7 +231,7 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
             lane_arrow2[0].remove()
             ldx2, ldy2 = 8 * np.cos(lane_yaw2), 8 * np.sin(lane_yaw2)
             lane_arrow2[0] = axes[1].arrow(ego_pos2[0], ego_pos2[1], ldx2, ldy2,
-                                           head_width=2, head_length=4, fc="yellow", ec="yellow")
+                                            head_width=2, head_length=4, fc="yellow", ec="yellow")
         else:
             ego_lane_patch2.set_xy(dummy)
             lane_arrow2[0].set_visible(False)
@@ -214,18 +242,25 @@ def compare_realizations_gif(realization_model_pref, realization_human_pref, rea
         ego_arrow2[0].remove()
         dx2, dy2 = 8 * np.cos(ego_yaw2), 8 * np.sin(ego_yaw2)
         ego_arrow2[0] = axes[1].arrow(ego_pos2[0], ego_pos2[1], dx2, dy2,
-                                      head_width=2, head_length=4, fc="red", ec="red")
+                                        head_width=2, head_length=4, fc="red", ec="red")
         text2.set_text(f"{ego_yaw2:.2f} rad")
         text2.set_position((ego_pos2[0] + dx2 + 2, ego_pos2[1] + dy2 + 2))
         axes[1].set_xlim(ego_pos2[0] - margin, ego_pos2[0] + margin)
         axes[1].set_ylim(ego_pos2[1] - margin, ego_pos2[1] + margin)
 
-        return patches1 + patches2 + [ego_lane_patch1, ego_lane_patch2,
-                                      ego_arrow1[0], ego_arrow2[0],
-                                      lane_arrow1[0], lane_arrow2[0],
-                                      text1, text2]
+        # Step display
+        ret = patches1 + patches2 + [ego_lane_patch1, ego_lane_patch2,
+                                        ego_arrow1[0], ego_arrow2[0],
+                                        lane_arrow1[0], lane_arrow2[0],
+                                        text1, text2]
+        if show_step:
+            step_text1.set_text(f"Step: {frame}")
+            step_text2.set_text(f"Step: {frame}")
+            ret += [step_text1, step_text2]
+
+        return ret
 
     max_frames = max(len(realization_human_pref), len(realization_model_pref))
     anim = animation.FuncAnimation(fig, update, frames=max_frames, init_func=init,
-                                   interval=interval, blit=True)
+                                    interval=interval, blit=True)
     return anim

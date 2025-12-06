@@ -10,11 +10,12 @@ import math
 DELTA = 0.1
 
 class Realization():
-    def __init__(self, ego_index=0, delta=DELTA):
+    def __init__(self, ego_index=0, delta=DELTA, proximity_threshold=3):
         self.network = None
         self.objects = None
         self.ego_index = ego_index
         self.delta = delta
+        self.proximity_threshold = proximity_threshold
         self.isScenic = False
 
     def __len__(self):
@@ -235,6 +236,7 @@ class WorldState():
 class VariableHandler:
     def __init__(self, realization):
         self.realization = realization
+        self.proximity_threshold = self.realization.proximity_threshold
         self.max_steps = len(realization)
         self._pools = {}
         self.ego = realization.ego
@@ -246,7 +248,7 @@ class VariableHandler:
 
     def __call__(self, step, **kwargs):
         if step not in self._pools:
-            self._pools[step] = VariablePool(step, self, **kwargs)
+            self._pools[step] = VariablePool(step, self, self.proximity_threshold, **kwargs)
 
         #self._pools.pop(step - 3, None)  # free memory by removing pools for steps that are no longer needed
         return self._pools[step]
@@ -299,7 +301,7 @@ class VariableHandler:
 
 
 class VariablePool:
-    def __init__(self, step, handler, proximity_threshold=3, steps_ahead=None):
+    def __init__(self, step, handler, proximity_threshold, steps_ahead=None):
         self.handler = handler
         self.realization = self.handler.realization
         self.other_objects = self.handler.other_objects

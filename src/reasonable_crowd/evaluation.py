@@ -81,3 +81,56 @@ def evaluate_rulebook_with_cache(rulebook, X, y, y_votes, rule_parameter_result_
 
 
     return correct, equal, incomparable, total, accuracy, weighted_accuracy, reasons, predictions
+
+
+    
+
+
+
+def evaluate_rulebook(rulebook, X, y, y_votes, trajectories_dict):
+    evaluations = {}
+
+    # evaluate each trajectory without using any cache
+    for name, realization in trajectories_dict.items():
+        evaluations[name] = rulebook.evaluate(realization)
+
+    correct = 0
+    equal = 0
+    incomparable = 0
+    total = len(X)
+    total_votes = 0
+    correct_votes = 0
+    reasons = []
+    predictions = []
+
+    for (t1, t2), label, (v1, v2) in zip(X, y, y_votes):
+        r1 = evaluations[t1]
+        r2 = evaluations[t2]
+
+        model_pref, reason = rulebook.compare_trajectories(r1, r2)
+        if model_pref == label:
+            correct += 1
+            if model_pref == Relation.LARGER:
+                correct_votes += v1
+                total_votes += v1
+            elif model_pref == Relation.SMALLER:
+                correct_votes += v2
+                total_votes += v2
+        elif label == Relation.LARGER:
+            total_votes += v1
+        elif label == Relation.SMALLER:
+            total_votes += v2
+
+        if model_pref == Relation.NONCOMPARABLE:
+            incomparable += 1
+        if model_pref == Relation.EQUAL:
+            equal += 1
+
+        reasons.append(reason)
+        predictions.append(model_pref)
+
+    accuracy = correct / total
+    weighted_accuracy = correct_votes / total_votes if total_votes > 0 else 0.0
+
+    return correct, equal, incomparable, total, accuracy, weighted_accuracy, reasons, predictions
+

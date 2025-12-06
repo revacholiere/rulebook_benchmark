@@ -21,6 +21,15 @@ SEED = 50
 NUM_RUNS = 10
 
 
+rb = Rulebook(rule_file="reasonable_crowd_rule_functions.py", rulebook_file="reasonable_crowd_5.graph")
+rule_id_to_rule = {1: f1, 2: f2, 3: f3, 4: f4, 5: f5, 6: f6, 7: f7, 8: f8, 9: f9, 11: f11, 12: f12, 13: f13, 15: f15, 17: f17, 18: f18}
+rulebook = InPlaceRulebook(rb.priority_graph, rule_id_to_rule)
+default_parameters = {}
+
+# save default parameters
+for rule_id, rule in rule_id_to_rule.items():
+    default_parameters[rule_id] = rule.parameters.copy()
+
 path_to_reasonable_crowd = "../../../Reasonable-Crowd"
 map_directory = path_to_reasonable_crowd + '/maps'
 trajectory_directory = path_to_reasonable_crowd + '/trajectories'
@@ -39,22 +48,24 @@ for filename, realization in trajectories:
 
 data = load_annotations(path_to_reasonable_crowd)
 
-X, y, y_votes = build_evaluation_dataset(data)
+X, y, y_votes, y_agreement = build_evaluation_dataset(data)
 # create pandas dataframe
-df = pd.DataFrame(columns=['X', 'y', 'votes'])
+df = pd.DataFrame(columns=['X', 'y', 'votes', 'agreement'])
 df['X'] = X
 df['y'] = y
 df['votes'] = y_votes
+df['agreement'] = y_agreement
 
 print(df.head())
 
-rb = Rulebook(rule_file="reasonable_crowd_rule_functions.py", rulebook_file="reasonable_crowd_5.graph")
-rule_id_to_rule = {1: f1, 2: f2, 3: f3, 4: f4, 5: f5, 6: f6, 7: f7, 8: f8, 9: f9, 11: f11, 12: f12, 13: f13, 15: f15, 17: f17, 18: f18}
-rulebook = InPlaceRulebook(rb.priority_graph, rule_id_to_rule)
 
 
 rule_id_to_params = {4: ["threshold"], 6: ["threshold"], 8: ["threshold"], 9: ["threshold"], 5: ["velocity", "threshold", "timesteps"], 11: ["threshold"], 12: ["threshold"], 13: ["threshold"], 18: ["buffer"]}
-rule_id_to_values = {4: {"threshold": [0.6, 0.8, 1, 1.2]}, 6: {"threshold": [0.6, 0.8, 1, 1.2]}, 8: {"threshold": [0.5, 1, 1.5, 2]}, 9: {"threshold": [0.5 , 1, 1.5, 2]}, 5: {"velocity": [4], "threshold": [-1.5, -1, -0.5], "timesteps": [30]}, 11: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 12: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 13: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 18: {"buffer": [0.3, 0.5, 0.8]}}
+rule_id_to_values = {4: {"threshold": [0.6, 0.8, 1, 1.2]}, 6: {"threshold": [0.6, 0.8, 1, 1.2]}, 8: {"threshold": [0.5, 1, 1.5, 2]}, 9: {"threshold": [0.5 , 1, 1.5, 2]}, 5: {"velocity": [3, 4, 5], "threshold": [-1.5, -1, -0.5], "timesteps": [20, 30, 40]}, 11: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 12: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 13: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 18: {"buffer": [0.3, 0.5, 0.7]}}
+
+
+# save current rule parameters
+
 
 if os.path.exists(os.path.join(output_directory, 'tuning_cache.pkl')):
     print("Loading cached rule evaluations...")
@@ -67,6 +78,10 @@ else:
     cache_dict = {}
     cache_rule_evaluations(rulebook, rule_id_to_params, rule_id_to_values, X, y, cache_dict, trajectories_dict)
     pickle.dump(cache_dict, open(os.path.join(output_directory, 'tuning_cache.pkl'), 'wb'))
+    # Apply default config to the rulebook
+    for rule_id, params in default_parameters.items():
+        rule = rule_id_to_rule[rule_id]
+        rule.parameters.update(params)
         
 
 groups = [[1, 2], [3, 7], [8, 9, 11, 12, 13], [17, 18, 15], [4, 5, 6]]
@@ -146,7 +161,6 @@ correct_list = []
 
 for run in range(NUM_RUNS):
     # Shuffle df
-    df = df.sample(frac=1, random_state=SEED).reset_index(drop=True)
 
     # Prepare data
     X = df['X'].tolist()
@@ -169,12 +183,7 @@ for run in range(NUM_RUNS):
         y_test = [y[i] for i in test_index]
         votes_test = [votes[i] for i in test_index]
 
-        # Further split training into train/validation (50%)
-        val_size = int(0.5 * len(X_train))
-        X_val, y_val, votes_val = X_train[:val_size], y_train[:val_size], votes_train[:val_size]
-        X_train, y_train, votes_train = X_train[val_size:], y_train[val_size:], votes_train[val_size:]
-        
-        
+            
         # if cached best config for this fold exists, load it
         if os.path.exists(os.path.join(output_directory, f'greedy_best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl')):
             best_config = pickle.load(open(os.path.join(output_directory, f'greedy_best_config_seed_{SEED}_run_{run}_fold_{fold}.pkl'), 'rb'))
@@ -194,14 +203,11 @@ for run in range(NUM_RUNS):
                 rule_parameter_result_dict=cache_dict
             ) """
             
-            best_config, best_score, best_val_score = optimize_rulebook_greedy_by_priority(
+            best_config, best_score = optimize_rulebook_greedy_by_priority(
                 rulebook,
                 training_data=X_train,
                 training_labels=y_train,
                 training_votes=votes_train,
-                validation_data=X_val,
-                validation_labels=y_val,
-                validation_votes=votes_val,
                 rule_id_to_params=rule_id_to_params,
                 rule_id_to_values=rule_id_to_values,
                 trajectories_dict=trajectories_dict,
@@ -265,47 +271,3 @@ print("Std Dev Weighted Accuracy:", std_dev_weighted_accuracy)
 reasons = [reason for reason in reasons if reason is not None]
 np.unique(reasons, return_counts=True)
 print("Reason Counts:", dict(zip(*np.unique(reasons, return_counts=True))))
-
-#num_rulebooks, correct, accuracy, unsatisfiable_samples = number_of_unique_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict, seed = 43)
-
-#print("Number of Unique Rulebooks:", num_rulebooks)
-#print("Correct:", correct)
-#print("Accuracy:", accuracy)
-#print("Unsatisfiable Samples:", unsatisfiable_samples)
-""" best_rb, best_score, best_val_score = simulated_annealing_with_validation(rulebook, 
-    train_data=train_df['X'].tolist(),
-    train_labels=train_df['y'].tolist(),
-    train_votes=train_df['votes'].tolist(),
-    val_data=val_df['X'].tolist(),
-    val_labels=val_df['y'].tolist(),
-    val_votes=val_df['votes'].tolist(),
-    rule_parameter_result_dict=cache_dict,
-    trajectories_dict=trajectories_dict,
-    max_iter=10000,
-    start_temp=300.0,
-    alpha=0.999,
-    seed=42)
-
-print("Best Score after Simulated Annealing with Validation:", best_score)
-print("Best Validation Score after Simulated Annealing with Validation:", best_val_score) """
-
-
-
-
-
-'''
-
-rulebooks, num_unique_rulebooks, correct, accuracy = find_scenario_rulebooks(rulebook, X, y, y_votes, cache_dict, trajectories_dict)
-
-print("Number of Unique Rulebooks across scenarios:", num_unique_rulebooks)
-print("Correct:", correct)
-print("Accuracy:", accuracy)
-
-# Visualize one of the rulebooks
-for name, rb in rulebooks.items():
-    print(f"Plotting priority graph for scenario: {name}")
-    plot_two_rulebooks_side_by_side(rulebook.in_place_priority_graph, rb.in_place_priority_graph)
-    break  # plot only one
-
-
-'''

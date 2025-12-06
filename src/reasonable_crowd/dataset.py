@@ -75,7 +75,7 @@ def load_annotations(path_to_reasonable_crowd):
 
 
 def build_evaluation_dataset(data):
-    X, y, y_votes = [], [], []
+    X, y, y_votes, y_agreement = [], [], [], []
 
     for scenario, annotations in data.items():
         # Collect all items and pairwise counts
@@ -127,41 +127,8 @@ def build_evaluation_dataset(data):
             X.append((t1, t2))
             y.append(human_pref)
             y_votes.append((count12, count21))
+            y_agreement.append(abs(count12 - count21) / (count12 + count21))
             
-    return X, y, y_votes
+    return X, y, y_votes, y_agreement
     
     
-
-    X = []
-    y = []
-    y_votes = []
-    for scenario, annotations in data.items():
-        #print(len(annotations.items()))
-        evaluated_pairs = set()
-        for pair, votes in list(annotations.items()):
-            t1, t2 = pair.split(" ;; ")
-            reverse_pair = f"{t2} ;; {t1}"
-            reverse_votes = annotations.get(reverse_pair, [])
-            if pair in evaluated_pairs or reverse_pair in evaluated_pairs:
-                continue
-            evaluated_pairs.add(pair)
-            evaluated_pairs.add(reverse_pair)
-                
-            votes_1 = len(votes)
-            votes_2 = len(reverse_votes)
-            
-            if votes_1 > votes_2:
-                human_pref = Relation.LARGER
-            elif votes_1 < votes_2:
-                human_pref = Relation.SMALLER
-            else:
-                human_pref = Relation.EQUAL
-                
-            if human_pref == Relation.EQUAL:
-                continue # skip equal votes for now
-                
-            X.append((t1, t2))
-            y.append(human_pref)
-            y_votes.append((votes_1, votes_2))
-
-    return X, y, y_votes

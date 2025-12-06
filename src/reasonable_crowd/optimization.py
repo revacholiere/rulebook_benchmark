@@ -23,6 +23,8 @@ def cache_rule_evaluations(
     pbar = tqdm(total=len(priority_order), desc="Caching rule evaluations", leave=False)
 
     for i, rule_id in enumerate(priority_order):
+        if rule_id in rule_parameter_result_dict: # rule already cached
+            continue
 
         if verbose:
             print(f"\n[optimize_rules_grid] Evaluating {rule_id} (id={rule_id})")
@@ -31,7 +33,7 @@ def cache_rule_evaluations(
         value_lists = rule_id_to_values.get(rule_id, {})
 
         # Case 1: rule has tunable params → grid search
-        if param_names and value_lists:
+        if param_names and value_lists and rule_id:
             for values in itertools.product(*(value_lists[p] for p in param_names)):
                 trial_params = dict(zip(param_names, values))
                 rule = rule_id_to_rule[rule_id]
@@ -195,8 +197,98 @@ def optimize_rulebook_grid_bruteforce_with_validation(rulebook, training_data, t
     return best_config, best_score, best_val_score
 
 
-
 def optimize_rulebook_greedy_by_priority(
+    rulebook,
+    training_data,
+    training_labels,
+    training_votes,
+    rule_id_to_params,
+    rule_id_to_values,
+    trajectories_dict,
+    epochs=1,
+    rule_parameter_result_dict=None,
+    skip=None,
+    verbose=0
+):
+    """
+    Greedy optimization in rule priority order (training-only).
+    For each rule, try all its parameter combinations while keeping
+    previously chosen parameters fixed. Accept a change only if it
+    improves the training score.
+
+    skip: set of rule IDs to skip during optimization
+    """
+
+    graph = rulebook.in_place_priority_graph
+    try:
+        priority_order = list(nx.topological_sort(graph))
+    except Exception:
+        priority_order = list(graph.nodes)
+
+    if rule_parameter_result_dict is None:
+        rule_parameter_result_dict = {}
+
+    best_config = {}
+    best_train_score = evaluate_rulebook_with_cache(
+        rulebook, training_data, training_labels, training_votes,
+        rule_parameter_result_dict, trajectories_dict
+    )[0]
+
+    if verbose:
+        print(f"[greedy] Initial Train={best_train_score:.6f}")
+
+
+    for epoch in range(epochs):
+        improved = False
+        for rule_id in priority_order:
+            if rule_id not in rule_id_to_params or (skip is not None and rule_id in skip):
+                continue
+
+            param_names = rule_id_to_params[rule_id]
+            value_lists = rule_id_to_values.get(rule_id, {})
+            for p in param_names:
+                if p not in value_lists:
+                    raise ValueError(f"No candidate values for {p} in rule {rule_id}")
+
+            combos = itertools.product(*[value_lists[p] for p in param_names])
+            combos = tqdm(list(combos), desc=f"Rule {rule_id}", leave=False, disable=not bool(verbose))
+
+            current_rule = graph.nodes[rule_id]['rule']
+            old_params = current_rule.parameters.copy()
+            best_local_params = old_params.copy()
+            local_best_train = best_train_score
+
+            for combo in combos:
+                trial_params = dict(zip(param_names, combo))
+                current_rule.parameters.update(trial_params)
+
+                train_score = evaluate_rulebook_with_cache(
+                    rulebook, training_data, training_labels, training_votes,
+                    rule_parameter_result_dict, trajectories_dict
+                )[0]
+
+                if verbose >= 2:
+                    print(f"  {trial_params} -> Train={train_score:.6f}")
+
+                if train_score > local_best_train:
+                    best_local_params = trial_params.copy()
+                    local_best_train = train_score
+                    improved = True
+
+            current_rule.parameters.update(best_local_params)
+            best_config[rule_id] = best_local_params
+            best_train_score = local_best_train
+
+            if verbose:
+                print(f"[greedy] {rule_id} -> Train={best_train_score:.6f}")
+        if not improved:
+            break
+        
+    return best_config, best_train_score
+
+
+
+def optimize_rulebook_greedy_by_priority_with_validation(
     rulebook,
     training_data,
     training_labels,
@@ -829,6 +921,7 @@ def greedy_group_optimization_with_validation(rulebook, train_x, train_y, train_
         levels = groups[fixed_level_depth + 1:] # only optimize lower levels
     improved = True
     iter_count = 0
+    
     while improved and iter_count < max_iters:
         improved = False
         train_best_score = evaluate_rulebook_with_cache(rb, train_x, train_y, train_votes, cache_dict, trajectories_dict)[0]
