@@ -128,3 +128,4 @@ examples/multi_objective/outputs*/
 
 src/reasonable_crowd/outputs/*
 src/agents/outputs/
+outputs/*
