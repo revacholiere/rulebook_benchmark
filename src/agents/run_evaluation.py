@@ -155,8 +155,6 @@ def simulate_and_eval(simulator, scenario, realization, rulebook, cfg, idx=0):
     if not simulation:
         log.error("Simulation returned None. Retrying...")
         raise Exception("Simulation returned None.")
-    if cfg['visualization']['record_simulation']:
-        visualize_simulation(simulation, ids=cfg['visualization']['ids'], save_path=cfg['visualization']['record_dir']+cfg['agent']['type']+f'_{idx+1}.mp4')
     process_trajectory(realization, isScenic=True)
     
     ### Evaluate the result ###
@@ -164,6 +162,9 @@ def simulate_and_eval(simulator, scenario, realization, rulebook, cfg, idx=0):
     if cfg['rulebook']['add_reaching_goal_rule']:
         results['reaching_goal'] = reaching_goal(simulation)
     error_value, normalized_error_value, violated_rules = rulebook.compute_error_value(results)
+    
+    if cfg['visualization']['record_simulation']:
+        visualize_simulation(simulation, ids=cfg['visualization']['ids'], violated_rules=violated_rules, save_path=cfg['visualization']['record_dir']+cfg['agent']['type']+f'_{idx+1}.mp4')
     
     return error_value, normalized_error_value, violated_rules
         

@@ -57,20 +57,18 @@ done
 
 # Using an array of indices for representative scenarios
 #indices=(
-#    5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100
+#    1 2 3 4 5 
 #)
-## built-in 20 missing: 12, 28, 48, 61, 67, 71, 93
-## ppo 20 missing: 4, 28, 41, 48, 51, 61, 67, 71, 75, 93
-#log_file="./outputs/representative30_eval.log"
+#log_file="./outputs/representative21_ppo_eval.log"
 #base_path="../../scenarios/basic_gen"
-#prefix="representative30_"
+#prefix="representative21_"
 #extension=".scenic"
 #
 #for idx in "${indices[@]}"; do
 #    scenario="${base_path}/${prefix}${idx}${extension}"
 #    echo "Running scenario: ${scenario}"
 #
-#    timeout --preserve-status --signal SIGINT 1500s \
+#    timeout --preserve-status --signal SIGINT 1000s \
 #    python run_evaluation.py \
 #        --config-name=eval.yaml \
 #        hydra.job.chdir=False \
@@ -80,7 +78,7 @@ done
 #
 #    exit_code=$?
 #    if [ $exit_code -eq 124 ]; then
-#        echo "⚠️ Scenario ${scenario} timed out after 1200s and was terminated." | tee -a "$log_file"
+#        echo "⚠️ Scenario ${scenario} timed out after 1000s and was terminated." | tee -a "$log_file"
 #    elif [ $exit_code -ne 0 ]; then
 #        echo "❌ Scenario ${scenario} exited with error code ${exit_code}." | tee -a "$log_file"
 #    else
