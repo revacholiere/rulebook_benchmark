@@ -67,13 +67,13 @@ def parse_log_file(log_path):
 
         # Detect post-failure
         elif "❌ Scenario" in line and "exited with error code" in line:
-            scenario_idx = int(line.split()[2].split('.scenic')[0].split('_')[-1])
+            scenario_idx = line.split()[2].split('.scenic')[0].split('/')[-1]
             current_data["failed"] = True
             results[scenario_idx] = current_data
             current_data = {"errors": "", "rule_counts": "", "unique_violations": "", "failed": False}
             
         elif "✅ Scenario" in line and "completed successfully" in line:
-            scenario_idx = int(line.split()[2].split('.scenic')[0].split('_')[-1])
+            scenario_idx = line.split()[2].split('.scenic')[0].split('/')[-1]
             results[scenario_idx] = current_data
             current_data = {"errors": "", "rule_counts": "", "unique_violations": "", "failed": False}
 
@@ -91,6 +91,6 @@ def parse_log_file(log_path):
     print(f"\nTotal unique violations across all scenarios: {len(unique_violations_global)}")
     
 if __name__ == "__main__":
-    log_file_path = "./outputs/representative30_eval.log"
+    log_file_path = "./outputs/collision_with_vru_ppo_eval.log"
     parse_log_file(log_file_path)
     

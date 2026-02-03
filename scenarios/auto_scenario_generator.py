@@ -84,6 +84,10 @@ def scenario_spec_checker(spec):
             raise ValueError(f"Agent {agent_name} cannot have spatial relation FASTER_LANE while ego is performing LEFT_TURN maneuver.")
         if spatial_relation == SpatialRelation.SLOWER_LANE and ego_maneuver == VehicleManeuver.RIGHT_TURN:
             raise ValueError(f"Agent {agent_name} cannot have spatial relation SLOWER_LANE while ego is performing RIGHT_TURN maneuver.")
+        if spatial_relation in [SpatialRelation.AHEAD_OF, SpatialRelation.BEHIND] and maneuver == VehicleManeuver.LEFT_TURN and ego_maneuver == VehicleManeuver.RIGHT_TURN:
+            raise ValueError(f"Agent {agent_name} cannot have spatial relation {spatial_relation.name} while performing LEFT_TURN maneuver when ego is performing RIGHT_TURN maneuver.")
+        if spatial_relation in [SpatialRelation.AHEAD_OF, SpatialRelation.BEHIND] and maneuver == VehicleManeuver.RIGHT_TURN and ego_maneuver == VehicleManeuver.LEFT_TURN:
+            raise ValueError(f"Agent {agent_name} cannot have spatial relation {spatial_relation.name} while performing RIGHT_TURN maneuver when ego is performing LEFT_TURN maneuver.")
         if spatial_relation == SpatialRelation.FASTER_LANE:
             faster_lane_agents_existed = True
         if spatial_relation == SpatialRelation.SLOWER_LANE:
@@ -100,8 +104,19 @@ def scenario_spec_checker(spec):
             maneuver = agent_spec['maneuver']
             if spatial_relation in [SpatialRelation.AHEAD_OF, SpatialRelation.BEHIND] and maneuver == VehicleManeuver.RIGHT_TURN:
                 raise ValueError(f"Agent {agent_name} cannot have spatial relation {spatial_relation.name} while performing RIGHT_TURN maneuver when other agents are in SLOWER_LANE.")
-            
-    # TODO: see 20_12
+    for agent_name, agent_spec in spec.get('agents', {}).items():
+        spatial_relation = agent_spec['spatial_relation']
+        maneuver = agent_spec['maneuver']
+        for agent_name_2, agent_spec_2 in spec.get('agents', {}).items():
+            if agent_name == agent_name_2:
+                continue
+            spatial_relation_2 = agent_spec_2['spatial_relation']
+            maneuver_2 = agent_spec_2['maneuver']
+            if spatial_relation in [SpatialRelation.AHEAD_OF, SpatialRelation.BEHIND] and spatial_relation_2 in [SpatialRelation.AHEAD_OF, SpatialRelation.BEHIND]:
+                if maneuver == VehicleManeuver.LEFT_TURN and maneuver_2 == VehicleManeuver.RIGHT_TURN:
+                    raise ValueError(f"Agent {agent_name} and agent {agent_name_2} are in the same lane but performing conflicting maneuvers: LEFT_TURN and RIGHT_TURN.")
+                if maneuver == VehicleManeuver.RIGHT_TURN and maneuver_2 == VehicleManeuver.LEFT_TURN:
+                    raise ValueError(f"Agent {agent_name} and agent {agent_name_2} are in the same lane but performing conflicting maneuvers: RIGHT_TURN and LEFT_TURN.")
 
 def scenario_generator(spec):
     """Given a scenario specification, generate the corresponding Scenic scenario file.
@@ -793,206 +808,644 @@ def generate_representative_scenario_specs_with_k_center(
 ):
     np.random.seed(42)  # for reproducibility
     
-    def encode_scenario(ego_maneuver, advs):
-        """
-        Encode one scenario into a (1+2n)-dim integer vector:
-        [ego, adv1_spa, adv1_beh, adv2_spa, adv2_beh, ...]
-        """
-        vec = [ego_maneuver.value]
-        for spa, beh in advs:
-            vec += [spa.value, beh.value]
-        return np.array(vec, dtype=int)
-    
-    def enumerate_scenarios(num_adv=3):
-        """
-        Enumerate all possible combinations of ego behavior and N adversary (spatial, behavior) pairs.
-        Returns a list of (1+2n)-dim numpy arrays.
-        """
-        all_scenarios = []
-        for ego_m in VehicleManeuver:
-            for advs in product(
-                product(SpatialRelation, VehicleManeuver),
-                repeat=num_adv,
-            ):
-                # check validity:
-                spec = {
-                    'scenario': 'temp.scenic',
-                    'map': '../../maps/Town05.xodr',
-                    'ego': {
-                        'type': AgentType.CAR,
-                        'maneuver': ego_m,
-                    },
-                    'agents': {},
-                }
-                for i, (spa, beh) in enumerate(advs):
-                    spec['agents'][f'agent{i+1}'] = {
-                        'type': AgentType.CAR,
-                        'maneuver': beh,
-                        'spatial_relation': spa,
-                    }
-                try:
-                    scenario_spec_checker(spec)
-                except ValueError as e:
-                    #print(f"Invalid spec skipped: ego {ego_m}, advs {advs}, reason: {e}")
-                    continue 
-                all_scenarios.append(encode_scenario(ego_m, advs))
-        return np.array(all_scenarios, dtype=int)
-
-    def hamming_distance_interchangeable(a, b, num_adv=3):
-        """
-        Compute Hamming distance between two scenarios ((1+2n)-dim integer vectors),
-        where adversary vehicles are treated as interchangeable.
-
-        Steps:
-        1. Compare ego behavior directly.
-        2. Compare all adversaries under all permutations.
-        3. Return the minimal total Hamming distance.
-        """
-        ego_dist = int(a[0] != b[0])
-        a_advs = np.array(a[1:]).reshape(num_adv, 2)
-        b_advs = np.array(b[1:]).reshape(num_adv, 2)
-
-        min_adv_dist = np.inf
-        for perm in permutations(range(num_adv)):
-            b_perm = b_advs[list(perm)]
-            dist = np.sum(a_advs != b_perm)
-            min_adv_dist = min(min_adv_dist, dist)
-
-        return ego_dist + min_adv_dist
-    
-    def k_center_hamming_interchangeable(X, k, num_adv=3):
-        """
-        Greedy K-center sampling using Hamming distance with interchangeable adversaries.
-        """
-        n = len(X)
-        print(f"Selecting center {1}/{k}")
-        centers = [np.random.randint(0, n)]  # randomly pick first center
-        min_dist = np.full(n, np.inf)
-
-        for j in range(1, k):
-            print(f"Selecting center {j+1}/{k}")
-            last_center = X[centers[-1]]
-
-            # Update distance to nearest selected center
+    if num_ped_agents != 0:
+        def encode_scenario(ego_maneuver, advs, peds):
+            """
+            Encode one scenario into a (1+2n+2m)-dim integer vector:
+            [ego, adv1_spa, adv1_beh, adv2_spa, adv2_beh, ..., ped1_spa, ped1_beh, ...]
+            """
+            vec = [ego_maneuver.value]
+            for spa, beh in advs:
+                vec += [spa.value, beh.value]
+            for spa, beh in peds:
+                vec += [spa.value, beh.value]
+            return np.array(vec, dtype=int)
+        
+        def decode_scenario(vec, num_adv=3, num_ped=2):
+            ego_maneuver = VehicleManeuver(vec[0])
+            advs = []
+            for i in range(num_adv):
+                spa = SpatialRelation(vec[1 + 2*i])
+                beh = VehicleManeuver(vec[1 + 2*i + 1])
+                advs.append((spa, beh))
+            peds = []
+            offset = 1 + 2 * num_adv
+            for i in range(num_ped):
+                spa = PedestrianSpatialRelation(vec[offset + 2*i])
+                beh = PedestrianManeuver(vec[offset + 2*i + 1])
+                peds.append((spa, beh))
+            return ego_maneuver, advs, peds
+        
+        def check_duplicate_scenario_encoding(encoding, num_adv=3, num_ped=2):
+            for i in range(num_adv - 1):
+                if encoding[2*i+1] > encoding[2*(i+1)+1]:
+                    return True
+                elif encoding[2*i+1] == encoding[2*(i+1)+1] and encoding[2*i+2] > encoding[2*(i+1)+2]:
+                    return True
+                else:
+                    continue
+            offset = 1 + 2 * num_adv
+            for i in range(num_ped - 1):
+                if encoding[offset + 2*i] > encoding[offset + 2*(i+1)]:
+                    return True
+                elif encoding[offset + 2*i] == encoding[offset + 2*(i+1)] and encoding[offset + 2*i + 1] > encoding[offset + 2*(i+1) + 1]:
+                    return True
+                else:
+                    continue
+            return False
+        
+        def enumerate_scenarios(num_adv=3, num_ped=2):
+            all_scenarios = []
+            for ego_m in VehicleManeuver:
+                for advs in product(
+                    product(SpatialRelation, VehicleManeuver),
+                    repeat=num_adv,
+                ):
+                    for peds in product(
+                        product(PedestrianSpatialRelation, PedestrianManeuver),
+                        repeat=num_ped,
+                    ):
+                        spec = {
+                            "scenario": f"basic_gen/representative.scenic",
+                            "map": "../../maps/Town05.xodr",
+                            "ego": {
+                                "type": AgentType.CAR,
+                                "maneuver": ego_m,
+                            },
+                            "agents": {}
+                        }
+                        for j, (spa, beh) in enumerate(advs):
+                            spec["agents"][f"car{j+1}"] = {
+                                "type": AgentType.CAR,
+                                "maneuver": beh,
+                                "spatial_relation": spa,
+                            }
+                        for j, (spa, beh) in enumerate(peds):
+                            spec["agents"][f"ped{j+1}"] = {
+                                "type": AgentType.PEDESTRIAN,
+                                "maneuver": beh,
+                                "spatial_relation": spa,
+                            }
+                        try:
+                            scenario_spec_checker(spec)
+                        except ValueError as e:
+                            continue
+                        encoding = encode_scenario(ego_m, advs, peds)
+                        if not check_duplicate_scenario_encoding(encoding, num_adv=num_adv, num_ped=num_ped):
+                            all_scenarios.append(encoding)
+            return np.array(all_scenarios, dtype=int)
+        
+        def hamming_distance_interchangeable(a, b, num_adv=3, num_ped=2):
+            ego_dist = int(a[0] != b[0])
+            a_advs = np.array(a[1:1+2*num_adv]).reshape(num_adv, 2)
+            b_advs = np.array(b[1:1+2*num_adv]).reshape(num_adv, 2)
+            min_adv_dist = np.inf
+            for perm in permutations(range(num_adv)):
+                b_perm = b_advs[list(perm)]
+                dist = np.sum(a_advs != b_perm)
+                min_adv_dist = min(min_adv_dist, dist)
+            a_peds = np.array(a[1+2*num_adv:]).reshape(num_ped, 2)
+            b_peds = np.array(b[1+2*num_adv:]).reshape(num_ped, 2)
+            min_ped_dist = np.inf
+            for perm in permutations(range(num_ped)):
+                b_perm = b_peds[list(perm)]
+                dist = np.sum(a_peds != b_perm)
+                min_ped_dist = min(min_ped_dist, dist)
+                
+            return ego_dist + min_adv_dist + min_ped_dist
+        
+        def k_center_hamming_interchangeable(X, k, num_adv=3, num_ped=2):
+            n = len(X)
+            print(f"Selecting center {1}/{k}")
+            centers = [np.random.randint(0, n)] 
+            min_dist = np.full(n, np.inf)
+            
+            for center_count in range(1, k):
+                print(f"Selecting center {center_count+1}/{k}")
+                for i in range(n):
+                    dist = hamming_distance_interchangeable(X[i], X[centers[-1]], num_adv=num_adv, num_ped=num_ped)
+                    if dist < min_dist[i]:
+                        min_dist[i] = dist
+                print(f"Current largest minimum distance: {np.max(min_dist)}")
+                
+                max_value = np.max(min_dist)
+                candidates = np.where(min_dist == max_value)[0]
+                if len(candidates) > 1:
+                    next_center = np.random.choice(candidates)
+                else:
+                    next_center = np.argmax(min_dist)
+                centers.append(next_center)
+                
             for i in range(n):
-                d = hamming_distance_interchangeable(X[i], last_center, num_adv)
+                d = hamming_distance_interchangeable(X[i], X[centers[-1]], num_adv, num_ped)
                 if d < min_dist[i]:
                     min_dist[i] = d
-            print(f"Current largest minimum distance: {np.max(min_dist)}")
-
-            # Pick the point farthest from all selected centers. If tie, randomly pick one.
-            max_value = np.max(min_dist)
-            candidates = np.where(min_dist == max_value)[0]
-            if len(candidates) > 1:
-                next_center = np.random.choice(candidates)
-            else:
-                next_center = np.argmax(min_dist)
-            centers.append(next_center)
+            print(f"Largest minimum distance after selection: {np.max(min_dist)}")
             
-        # Print the largest minimum distance for analysis
-        for i in range(n):
-            d = hamming_distance_interchangeable(X[i], X[centers[-1]], num_adv)
-            if d < min_dist[i]:
-                min_dist[i] = d
-        print(f"Largest minimum distance after selection: {np.max(min_dist)}")
-
-        return centers
-    
-    def evaluate_scenario_coverage(selected_scenarios, num_adv=3):
-        """
-        Analyze frequency of values across all dimensions of selected scenarios.
-        Also count how often each (adv_spa, adv_beh) pair appears.
-        """
-        ego_counts = Counter()
-        adv_spa_counts = Counter()
-        adv_beh_counts = Counter()
-        adv_pair_counts = Counter()
-
-        for s in selected_scenarios:
-            ego_counts[s[0]] += 1
-            adv_values = np.array(s[1:]).reshape(num_adv, 2)
-            for spa, beh in adv_values:
-                adv_spa_counts[spa] += 1
-                adv_beh_counts[beh] += 1
-                adv_pair_counts[(spa, beh)] += 1
-
-        def enum_name(enum_cls, val):
-            try:
-                return enum_cls(val).name
-            except ValueError:
-                return str(val)
-
-        print("=== Ego Maneuver Counts ===")
-        for k, v in sorted(ego_counts.items()):
-            print(f"{enum_name(VehicleManeuver, k)} {v}")
-        print()
-
-        print("=== Adversary Spatial Relation Counts ===")
-        for k, v in sorted(adv_spa_counts.items()):
-            print(f"{enum_name(SpatialRelation, k)} {v}")
-        print()
-
-        print("=== Adversary Maneuver Counts ===")
-        for k, v in sorted(adv_beh_counts.items()):
-            print(f"{enum_name(VehicleManeuver, k)} {v}")
-        print()
-
-        print("=== (SpatialRelation, Maneuver) Pair Counts ===")
-        total = sum(adv_pair_counts.values())
-        unsampled_pairs = 0
-        for spa_idx in range(len(SpatialRelation)):
-            for beh_idx in range(len(VehicleManeuver)):
-                v = adv_pair_counts.get((spa_idx + 1, beh_idx + 1), 0)
-                if v == 0:
-                    unsampled_pairs += 1
-                spa_name = enum_name(SpatialRelation, spa_idx + 1)
-                beh_name = enum_name(VehicleManeuver, beh_idx + 1)
-                print(f"{spa_name} {beh_name} {v}")
-        print("(SpatialRelation, Maneuver) Pair Coverage:", (len(SpatialRelation) * len(VehicleManeuver) - unsampled_pairs), "/", (len(SpatialRelation) * len(VehicleManeuver) - 2))
+            return centers
         
-    all_scenarios = enumerate_scenarios(num_adv=num_vehicle_agents)
-    print(f"Total enumerated scenarios: {all_scenarios.shape[0]}, each of dimension {all_scenarios.shape[1]}")
-    selected_indices = k_center_hamming_interchangeable(all_scenarios, num_scenarios, num_adv=num_vehicle_agents)
-    selected_scenarios = all_scenarios[selected_indices]
-    print(f"Selected scenarios:\n{selected_scenarios}, total {len(selected_scenarios)}")
-    evaluate_scenario_coverage(selected_scenarios, num_adv=num_vehicle_agents)
-    
-    # Write selected scenario specs to JSONL file
-    def decode_scenario(vec, num_adv=3):
-        ego_maneuver = VehicleManeuver(vec[0])
-        advs = []
-        for i in range(num_adv):
-            spa = SpatialRelation(vec[1 + 2*i])
-            beh = VehicleManeuver(vec[1 + 2*i + 1])
-            advs.append((spa, beh))
-        return ego_maneuver, advs
-    
-    with open(jsonl_filename, "w") as f:
-        for j, vec in enumerate(selected_scenarios):
-            ego_maneuver, advs = decode_scenario(vec, num_adv=num_vehicle_agents)
-            spec = {
-                "scenario": f"basic_gen/representative{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
-                "map": "../../maps/Town05.xodr",
-                "ego": {
-                    "type": AgentType.CAR,
-                    "maneuver": ego_maneuver,
-                },
-                "agents": {}
-            }
-            for i, (spa, beh) in enumerate(advs):
-                spec["agents"][f"car{i+1}"] = {
-                    "type": AgentType.CAR,
-                    "maneuver": beh,
-                    "spatial_relation": spa,
+        def evaluate_scenario_coverage(selected_scenarios, num_adv=3, num_ped=0):
+            """
+            Analyze frequency of values across all dimensions of selected scenarios.
+            Also count how often each (adv_spa, adv_beh) and (ped_spa, ped_beh) pair appears.
+            """
+            ego_counts = Counter()
+            adv_spa_counts = Counter()
+            adv_beh_counts = Counter()
+            adv_pair_counts = Counter()
+            ped_spa_counts = Counter()
+            ped_beh_counts = Counter()
+            ped_pair_counts = Counter()
+
+            for s in selected_scenarios:
+                ego_counts[s[0]] += 1
+                adv_values = np.array(s[1:1+2*num_adv]).reshape(num_adv, 2)
+                for spa, beh in adv_values:
+                    adv_spa_counts[spa] += 1
+                    adv_beh_counts[beh] += 1
+                    adv_pair_counts[(spa, beh)] += 1
+                if num_ped > 0:
+                    ped_values = np.array(s[1+2*num_adv:]).reshape(num_ped, 2)
+                    for spa, beh in ped_values:
+                        ped_spa_counts[spa] += 1
+                        ped_beh_counts[beh] += 1
+                        ped_pair_counts[(spa, beh)] += 1
+
+            def enum_name(enum_cls, val):
+                try:
+                    return enum_cls(val).name
+                except ValueError:
+                    return str(val)
+                
+            print("=== Ego Maneuver Counts ===")
+            for k, v in sorted(ego_counts.items()):
+                print(f"{enum_name(VehicleManeuver, k)} {v}")
+            print()
+            print("=== Adversary Spatial Relation Counts ===")
+            for k, v in sorted(adv_spa_counts.items()):
+                print(f"{enum_name(SpatialRelation, k)} {v}")
+            print()
+            print("=== Adversary Maneuver Counts ===")
+            for k, v in sorted(adv_beh_counts.items()):
+                print(f"{enum_name(VehicleManeuver, k)} {v}")
+            print()
+            print("=== (SpatialRelation, Maneuver) Pair Counts ===")
+            unsampled_pairs = 0
+            for spa_idx in range(len(SpatialRelation)):
+                for beh_idx in range(len(VehicleManeuver)):
+                    v = adv_pair_counts.get((spa_idx + 1, beh_idx + 1), 0)
+                    if v == 0:
+                        unsampled_pairs += 1
+                    spa_name = enum_name(SpatialRelation, spa_idx + 1)
+                    beh_name = enum_name(VehicleManeuver, beh_idx + 1)
+                    print(f"{spa_name} {beh_name} {v}")
+            print("(SpatialRelation, Maneuver) Pair Coverage:", (len(SpatialRelation) * len(VehicleManeuver) - unsampled_pairs), "/", (len(SpatialRelation) * len(VehicleManeuver) - 2))
+            if num_ped > 0:
+                print()
+                print("=== Pedestrian Spatial Relation Counts ===")
+                for k, v in sorted(ped_spa_counts.items()):
+                    print(f"{enum_name(PedestrianSpatialRelation, k)} {v}")
+                print()
+                print("=== Pedestrian Maneuver Counts ===")
+                for k, v in sorted(ped_beh_counts.items()):
+                    print(f"{enum_name(PedestrianManeuver, k)} {v}")
+                print()
+                print("=== (SpatialRelation, Maneuver) Pair Counts ===")
+                unsampled_pairs = 0
+                for spa_idx in range(len(PedestrianSpatialRelation)):
+                    for beh_idx in range(len(PedestrianManeuver)):
+                        v = ped_pair_counts.get((spa_idx + 1, beh_idx + 1), 0)
+                        if v == 0:
+                            unsampled_pairs += 1
+                        spa_name = enum_name(PedestrianSpatialRelation, spa_idx + 1)
+                        beh_name = enum_name(PedestrianManeuver, beh_idx + 1)
+                        print(f"{spa_name} {beh_name} {v}")
+                print("(SpatialRelation, Maneuver) Pair Coverage:", (len(PedestrianSpatialRelation) * len(PedestrianManeuver) - unsampled_pairs), "/", (len(PedestrianSpatialRelation) * len(PedestrianManeuver)))
+        
+        all_scenarios = enumerate_scenarios(num_adv=num_vehicle_agents, num_ped=num_ped_agents)
+        print(f"Total enumerated scenarios: {all_scenarios.shape[0]}, each of dimension {all_scenarios.shape[1]}")
+        selected_indices = k_center_hamming_interchangeable(all_scenarios, num_scenarios, num_adv=num_vehicle_agents, num_ped=num_ped_agents)
+        selected_scenarios = all_scenarios[selected_indices]
+        print(f"Selected scenarios:\n{selected_scenarios}, total {len(selected_scenarios)}")
+        evaluate_scenario_coverage(selected_scenarios, num_adv=num_vehicle_agents, num_ped=num_ped_agents)
+        
+        # Write selected scenario specs to JSONL file
+        with open(jsonl_filename, "w") as f:
+            for j, vec in enumerate(selected_scenarios):
+                ego_maneuver, advs, peds = decode_scenario(vec, num_adv=num_vehicle_agents, num_ped=num_ped_agents)
+                spec = {
+                    "scenario": f"basic_gen/representative{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
+                    "map": "../../maps/Town05.xodr",
+                    "ego": {
+                        "type": AgentType.CAR,
+                        "maneuver": ego_maneuver,
+                    },
+                    "agents": {}
                 }
-            f.write(json.dumps(spec, default=lambda o: o.name) + "\n")
+                for i, (spa, beh) in enumerate(advs):
+                    spec["agents"][f"car{i+1}"] = {
+                        "type": AgentType.CAR,
+                        "maneuver": beh,
+                        "spatial_relation": spa,
+                    }
+                for i, (spa, beh) in enumerate(peds):
+                    spec["agents"][f"ped{i+1}"] = {
+                        "type": AgentType.PEDESTRIAN,
+                        "maneuver": beh,
+                        "spatial_relation": spa,
+                    }
+                f.write(json.dumps(spec, default=lambda o: o.name) + "\n")
+    else:
+        def encode_scenario(ego_maneuver, advs):
+            """
+            Encode one scenario into a (1+2n)-dim integer vector:
+            [ego, adv1_spa, adv1_beh, adv2_spa, adv2_beh, ...]
+            """
+            vec = [ego_maneuver.value]
+            for spa, beh in advs:
+                vec += [spa.value, beh.value]
+            return np.array(vec, dtype=int)
+        
+        def decode_scenario(vec, num_adv=3):
+            ego_maneuver = VehicleManeuver(vec[0])
+            advs = []
+            for i in range(num_adv):
+                spa = SpatialRelation(vec[1 + 2*i])
+                beh = VehicleManeuver(vec[1 + 2*i + 1])
+                advs.append((spa, beh))
+            return ego_maneuver, advs
+        
+        def check_duplicate_scenario_encoding(encoding):
+            for i in range(int(len(encoding)/2) - 1):
+                if encoding[2*i+1] > encoding[2*(i+1)+1]:
+                    return True
+                elif encoding[2*i+1] == encoding[2*(i+1)+1] and encoding[2*i+2] > encoding[2*(i+1)+2]:
+                    return True
+                else:
+                    continue
+            return False
+        
+        def count_neighbors(all_scenarios):
+            count_dict = Counter()
+            for encoding in all_scenarios:
+                count = 4 # ego maneuvers
+                for i in range(1, encoding[3]+1):
+                    if i != encoding[1]:
+                        neighbor_encoding = encoding.copy()
+                        neighbor_encoding[1] = i
+                        ego_maneuver, advs = decode_scenario(neighbor_encoding, num_adv=2)
+                        spec = {
+                            "scenario": f"basic_gen/representative.scenic",
+                            "map": "../../maps/Town05.xodr",
+                            "ego": {
+                                "type": AgentType.CAR,
+                                "maneuver": ego_maneuver,
+                            },
+                            "agents": {}
+                        }
+                        for j, (spa, beh) in enumerate(advs):
+                            spec["agents"][f"car{j+1}"] = {
+                                "type": AgentType.CAR,
+                                "maneuver": beh,
+                                "spatial_relation": spa,
+                            }
+                        try:
+                            scenario_spec_checker(spec)
+                        except ValueError as e:
+                            continue
+                        if not check_duplicate_scenario_encoding(neighbor_encoding):
+                            count += 1
+                if encoding[1] == encoding[3]:
+                    for i in range(1, encoding[4]+1):
+                        if i != encoding[2]:
+                            neighbor_encoding = encoding.copy()
+                            neighbor_encoding[2] = i
+                            ego_maneuver, advs = decode_scenario(neighbor_encoding, num_adv=2)
+                            spec = {
+                                "scenario": f"basic_gen/representative.scenic",
+                                "map": "../../maps/Town05.xodr",
+                                "ego": {
+                                    "type": AgentType.CAR,
+                                    "maneuver": ego_maneuver,
+                                },
+                                "agents": {}
+                            }
+                            for j, (spa, beh) in enumerate(advs):
+                                spec["agents"][f"car{j+1}"] = {
+                                    "type": AgentType.CAR,
+                                    "maneuver": beh,
+                                    "spatial_relation": spa,
+                                }
+                            try:
+                                scenario_spec_checker(spec)
+                            except ValueError as e:
+                                continue
+                            if not check_duplicate_scenario_encoding(neighbor_encoding):
+                                count += 1
+                else:
+                    for i in range(1, 6):
+                        if i != encoding[2]:
+                            neighbor_encoding = encoding.copy()
+                            neighbor_encoding[2] = i
+                            ego_maneuver, advs = decode_scenario(neighbor_encoding, num_adv=2)
+                            spec = {
+                                "scenario": f"basic_gen/representative.scenic",
+                                "map": "../../maps/Town05.xodr",
+                                "ego": {
+                                    "type": AgentType.CAR,
+                                    "maneuver": ego_maneuver,
+                                },
+                                "agents": {}
+                            }
+                            for j, (spa, beh) in enumerate(advs):
+                                spec["agents"][f"car{j+1}"] = {
+                                    "type": AgentType.CAR,
+                                    "maneuver": beh,
+                                    "spatial_relation": spa,
+                                }
+                            try:
+                                scenario_spec_checker(spec)
+                            except ValueError as e:
+                                continue
+                            if not check_duplicate_scenario_encoding(neighbor_encoding):
+                                count += 1
+                for i in range(encoding[1], 7):
+                    if i != encoding[3]:
+                        neighbor_encoding = encoding.copy()
+                        neighbor_encoding[3] = i
+                        ego_maneuver, advs = decode_scenario(neighbor_encoding, num_adv=2)
+                        spec = {
+                            "scenario": f"basic_gen/representative.scenic",
+                            "map": "../../maps/Town05.xodr",
+                            "ego": {
+                                "type": AgentType.CAR,
+                                "maneuver": ego_maneuver,
+                            },
+                            "agents": {}
+                        }
+                        for j, (spa, beh) in enumerate(advs):
+                            spec["agents"][f"car{j+1}"] = {
+                                "type": AgentType.CAR,
+                                "maneuver": beh,
+                                "spatial_relation": spa,
+                            }
+                        try:
+                            scenario_spec_checker(spec)
+                        except ValueError as e:
+                            continue
+                        if not check_duplicate_scenario_encoding(neighbor_encoding):
+                            count += 1
+                if encoding[1] == encoding[3]:
+                    for i in range(encoding[2], 6):
+                        if i != encoding[4]:
+                            neighbor_encoding = encoding.copy()
+                            neighbor_encoding[4] = i
+                            ego_maneuver, advs = decode_scenario(neighbor_encoding, num_adv=2)
+                            spec = {
+                                "scenario": f"basic_gen/representative.scenic",
+                                "map": "../../maps/Town05.xodr",
+                                "ego": {
+                                    "type": AgentType.CAR,
+                                    "maneuver": ego_maneuver,
+                                },
+                                "agents": {}
+                            }
+                            for j, (spa, beh) in enumerate(advs):
+                                spec["agents"][f"car{j+1}"] = {
+                                    "type": AgentType.CAR,
+                                    "maneuver": beh,
+                                    "spatial_relation": spa,
+                                }
+                            try:
+                                scenario_spec_checker(spec)
+                            except ValueError as e:
+                                continue
+                            if not check_duplicate_scenario_encoding(neighbor_encoding):
+                                count += 1
+                else:
+                    for i in range(1, 6):
+                        if i != encoding[4]:
+                            neighbor_encoding = encoding.copy()
+                            neighbor_encoding[4] = i
+                            ego_maneuver, advs = decode_scenario(neighbor_encoding, num_adv=2)
+                            spec = {
+                                "scenario": f"basic_gen/representative.scenic",
+                                "map": "../../maps/Town05.xodr",
+                                "ego": {
+                                    "type": AgentType.CAR,
+                                    "maneuver": ego_maneuver,
+                                },
+                                "agents": {}
+                            }
+                            for j, (spa, beh) in enumerate(advs):
+                                spec["agents"][f"car{j+1}"] = {
+                                    "type": AgentType.CAR,
+                                    "maneuver": beh,
+                                    "spatial_relation": spa,
+                                }
+                            try:
+                                scenario_spec_checker(spec)
+                            except ValueError as e:
+                                continue
+                            if not check_duplicate_scenario_encoding(neighbor_encoding):
+                                count += 1
+                print(f"Scenario {encoding} has {count} neighbors")
+                count_dict[count] += 1
+            print("Neighbor count distribution:")
+            for k, v in sorted(count_dict.items()):
+                print(f"{k}: {v}")
+                
+        def enumerate_scenarios(num_adv=3):
+            """
+            Enumerate all possible combinations of ego behavior and N adversary (spatial, behavior) pairs.
+            Returns a list of (1+2n)-dim numpy arrays.
+            """
+            all_scenarios = []
+            for ego_m in VehicleManeuver:
+                for advs in product(
+                    product(SpatialRelation, VehicleManeuver),
+                    repeat=num_adv,
+                ):
+                    # check validity:
+                    spec = {
+                        'scenario': 'temp.scenic',
+                        'map': '../../maps/Town05.xodr',
+                        'ego': {
+                            'type': AgentType.CAR,
+                            'maneuver': ego_m,
+                        },
+                        'agents': {},
+                    }
+                    for i, (spa, beh) in enumerate(advs):
+                        spec['agents'][f'agent{i+1}'] = {
+                            'type': AgentType.CAR,
+                            'maneuver': beh,
+                            'spatial_relation': spa,
+                        }
+                    try:
+                        scenario_spec_checker(spec)
+                    except ValueError as e:
+                        #encoding = encode_scenario(ego_m, advs)
+                        #print(f"Invalid scenario skipped: {encoding}")
+                        continue 
+                    encoding = encode_scenario(ego_m, advs)
+                    if check_duplicate_scenario_encoding(encoding):
+                        #print(f"Duplicate scenario skipped: {encoding}")
+                        continue
+                    else:
+                        #print(f"Valid scenario encoded: {encoding}")
+                        all_scenarios.append(encoding)
+            return np.array(all_scenarios, dtype=int)
+
+        def hamming_distance_interchangeable(a, b, num_adv=3):
+            """
+            Compute Hamming distance between two scenarios ((1+2n)-dim integer vectors),
+            where adversary vehicles are treated as interchangeable.
+
+            Steps:
+            1. Compare ego behavior directly.
+            2. Compare all adversaries under all permutations.
+            3. Return the minimal total Hamming distance.
+            """
+            ego_dist = int(a[0] != b[0])
+            a_advs = np.array(a[1:]).reshape(num_adv, 2)
+            b_advs = np.array(b[1:]).reshape(num_adv, 2)
+
+            min_adv_dist = np.inf
+            for perm in permutations(range(num_adv)):
+                b_perm = b_advs[list(perm)]
+                dist = np.sum(a_advs != b_perm)
+                min_adv_dist = min(min_adv_dist, dist)
+
+            return ego_dist + min_adv_dist
+        
+        def k_center_hamming_interchangeable(X, k, num_adv=3):
+            """
+            Greedy K-center sampling using Hamming distance with interchangeable adversaries.
+            """
+            n = len(X)
+            print(f"Selecting center {1}/{k}")
+            centers = [np.random.randint(0, n)]  # randomly pick first center
+            min_dist = np.full(n, np.inf)
+
+            for j in range(1, k):
+                print(f"Selecting center {j+1}/{k}")
+                last_center = X[centers[-1]]
+
+                # Update distance to nearest selected center
+                for i in range(n):
+                    d = hamming_distance_interchangeable(X[i], last_center, num_adv)
+                    if d < min_dist[i]:
+                        min_dist[i] = d
+                print(f"Current largest minimum distance: {np.max(min_dist)}")
+
+                # Pick the point farthest from all selected centers. If tie, randomly pick one.
+                max_value = np.max(min_dist)
+                candidates = np.where(min_dist == max_value)[0]
+                if len(candidates) > 1:
+                    next_center = np.random.choice(candidates)
+                else:
+                    next_center = np.argmax(min_dist)
+                centers.append(next_center)
+                
+            # Print the largest minimum distance for analysis
+            for i in range(n):
+                d = hamming_distance_interchangeable(X[i], X[centers[-1]], num_adv)
+                if d < min_dist[i]:
+                    min_dist[i] = d
+            print(f"Largest minimum distance after selection: {np.max(min_dist)}")
+
+            return centers
+        
+        def evaluate_scenario_coverage(selected_scenarios, num_adv=3):
+            """
+            Analyze frequency of values across all dimensions of selected scenarios.
+            Also count how often each (adv_spa, adv_beh) pair appears.
+            """
+            ego_counts = Counter()
+            adv_spa_counts = Counter()
+            adv_beh_counts = Counter()
+            adv_pair_counts = Counter()
+
+            for s in selected_scenarios:
+                ego_counts[s[0]] += 1
+                adv_values = np.array(s[1:]).reshape(num_adv, 2)
+                for spa, beh in adv_values:
+                    adv_spa_counts[spa] += 1
+                    adv_beh_counts[beh] += 1
+                    adv_pair_counts[(spa, beh)] += 1
+
+            def enum_name(enum_cls, val):
+                try:
+                    return enum_cls(val).name
+                except ValueError:
+                    return str(val)
+
+            print("=== Ego Maneuver Counts ===")
+            for k, v in sorted(ego_counts.items()):
+                print(f"{enum_name(VehicleManeuver, k)} {v}")
+            print()
+
+            print("=== Adversary Spatial Relation Counts ===")
+            for k, v in sorted(adv_spa_counts.items()):
+                print(f"{enum_name(SpatialRelation, k)} {v}")
+            print()
+
+            print("=== Adversary Maneuver Counts ===")
+            for k, v in sorted(adv_beh_counts.items()):
+                print(f"{enum_name(VehicleManeuver, k)} {v}")
+            print()
+
+            print("=== (SpatialRelation, Maneuver) Pair Counts ===")
+            total = sum(adv_pair_counts.values())
+            unsampled_pairs = 0
+            for spa_idx in range(len(SpatialRelation)):
+                for beh_idx in range(len(VehicleManeuver)):
+                    v = adv_pair_counts.get((spa_idx + 1, beh_idx + 1), 0)
+                    if v == 0:
+                        unsampled_pairs += 1
+                    spa_name = enum_name(SpatialRelation, spa_idx + 1)
+                    beh_name = enum_name(VehicleManeuver, beh_idx + 1)
+                    print(f"{spa_name} {beh_name} {v}")
+            print("(SpatialRelation, Maneuver) Pair Coverage:", (len(SpatialRelation) * len(VehicleManeuver) - unsampled_pairs), "/", (len(SpatialRelation) * len(VehicleManeuver) - 2))
+            
+        all_scenarios = enumerate_scenarios(num_adv=num_vehicle_agents)
+        print(f"Total enumerated scenarios: {all_scenarios.shape[0]}, each of dimension {all_scenarios.shape[1]}")
+        selected_indices = k_center_hamming_interchangeable(all_scenarios, num_scenarios, num_adv=num_vehicle_agents)
+        selected_scenarios = all_scenarios[selected_indices]
+        print(f"Selected scenarios:\n{selected_scenarios}, total {len(selected_scenarios)}")
+        evaluate_scenario_coverage(selected_scenarios, num_adv=num_vehicle_agents)
+    
+        # Write selected scenario specs to JSONL file
+        with open(jsonl_filename, "w") as f:
+            for j, vec in enumerate(selected_scenarios):
+                ego_maneuver, advs = decode_scenario(vec, num_adv=num_vehicle_agents)
+                spec = {
+                    "scenario": f"basic_gen/representative{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
+                    "map": "../../maps/Town05.xodr",
+                    "ego": {
+                        "type": AgentType.CAR,
+                        "maneuver": ego_maneuver,
+                    },
+                    "agents": {}
+                }
+                for i, (spa, beh) in enumerate(advs):
+                    spec["agents"][f"car{i+1}"] = {
+                        "type": AgentType.CAR,
+                        "maneuver": beh,
+                        "spatial_relation": spa,
+                    }
+                f.write(json.dumps(spec, default=lambda o: o.name) + "\n")
 
 if __name__ == "__main__":
+    pass
+    # Below are example usages of the functions defined above.
+    
     # Example: Generate representative scenario specs using k-center algorithm and save to a JSONL file
     #generate_representative_scenario_specs_with_k_center(
-    #    jsonl_filename="basic_specs/representative_scenarios_20.jsonl",
+    #    jsonl_filename="basic_specs/representative_scenarios_21.jsonl",
     #    num_vehicle_agents=2,
-    #    num_ped_agents=0,
+    #    num_ped_agents=1,
     #    num_scenarios=100
     #)
     
@@ -1005,7 +1458,7 @@ if __name__ == "__main__":
     #)
     
     # Example: Generate Scenic programs from a JSONL file containing multiple specs
-    generate_scenario_from_file('basic_specs/representative_scenarios_20.jsonl')
+    #generate_scenario_from_file('basic_specs/representative_scenarios_21.jsonl')
     
     # Example scenario spec
     #spec = {

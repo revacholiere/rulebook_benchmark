@@ -37,7 +37,7 @@ def run_newtonian_scenario(file_path, max_steps=100, seed=None, maxIterations=10
         raise RuntimeError("Simulation failed.")
     return simulation
 
-def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, trail_length=15, truncate=0):
+def visualize_simulation(simulation, ids, violated_rules=[], save_path='trajectory.mp4', fps=10, trail_length=15, truncate=0):
     trajectories = {}
     for id in ids:
         if id not in simulation.records:
@@ -51,6 +51,14 @@ def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, tr
 
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_aspect('equal', 'box')
+    
+    # Print violated rules on the plot
+    rules_text = "\n".join(violated_rules)
+    rules_display = ax.text(1.1, 1.1, rules_text, 
+                             fontsize=12, color='red',# weight='bold',
+                             ha='right', va='top', transform=ax.transAxes,
+                             bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'),
+                             animated=True)
 
     # Create polygon patches and text labels for each vehicle
     vehicle_patches = {}
@@ -96,6 +104,8 @@ def visualize_simulation(simulation, ids, save_path='trajectory.mp4', fps=10, tr
 
     def update(frame):
         artists = []
+        artists.append(rules_display)
+        
         for i, (vid, traj) in enumerate(trajectories.items()):
             if frame < len(traj):
                 poly: ShapelyPolygon = traj[frame][1]
