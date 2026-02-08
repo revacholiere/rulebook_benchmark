@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
 from sklearn.model_selection import KFold
 from reasonable_crowd.rulebook_visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
+from reasonable_crowd.optimization import find_scenario_groups, greedy_group_optimization, brute_force_group_optimization
 
 SEED = 50
 NUM_RUNS = 10
@@ -61,18 +62,18 @@ rulebook = InPlaceRulebook(rb.priority_graph, rule_id_to_rule)
 rule_id_to_params = {4: ["threshold"], 6: ["threshold"], 8: ["threshold"], 9: ["threshold"], 5: ["velocity", "threshold", "timesteps"], 11: ["threshold"], 12: ["threshold"], 13: ["threshold"], 18: ["buffer"]}
 rule_id_to_values = {4: {"threshold": [0.6, 0.8, 1, 1.2]}, 6: {"threshold": [0.6, 0.8, 1, 1.2]}, 8: {"threshold": [0.5, 1, 1.5, 2]}, 9: {"threshold": [0.5 , 1, 1.5, 2]}, 5: {"velocity": [3, 4, 5], "threshold": [-1.5, -1, -0.5], "timesteps": [20, 30, 40]}, 11: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 12: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 13: {"threshold": [0.4, 0.8, 1.2, 1.6]}, 18: {"buffer": [0.3, 0.5, 0.7]}}
 
+default_params = {}
+for rule_id, rule in rule_id_to_rule.items():
+    default_params[rule_id] = rule.parameters.copy()
+    print(f"Rule {rule_id} default parameters: {rule.parameters}")
+    
 if os.path.exists(os.path.join(output_directory, 'tuning_cache.pkl')):    
     print("Loading cached rule evaluations...")
     with open(os.path.join(output_directory, 'tuning_cache.pkl'), 'rb') as f:
         cache_dict = pickle.load(f)
 else:
     print("No cached rule evaluations found. Starting with empty cache.")
-    print("Saving default rulebook parameters...")
-    default_params = {}
-    for rule_id, rule in rule_id_to_rule.items():
-        default_params[rule_id] = rule.parameters.copy()
-        print(f"Rule {rule_id} default parameters: {rule.parameters}")
-    
+    print("Saving default rulebook parameters...")    
     cache_dict = {}
     cache_rule_evaluations(rulebook, rule_id_to_params, rule_id_to_values, X, y, cache_dict, trajectories_dict)
     pickle.dump(cache_dict, open(os.path.join(output_directory, 'tuning_cache.pkl'), 'wb'))
@@ -220,3 +221,32 @@ print("Reason Counts:", dict(zip(*np.unique(reasons, return_counts=True))))
 
 print("\n")
 
+
+print("Restoring default rulebook parameters...")
+for rule_id, params in default_params.items():
+    rule_id_to_rule[rule_id].parameters.update(params)
+    
+
+
+greedy_rulebooks, num_unique_rulebooks, correct, accuracy, scenario_to_samples = find_scenario_groups(rulebook, X, y, y_votes, cache_dict, trajectories_dict, greedy_group_optimization, groups, max_iters=1, restricted=False, fixed_level_depth=0)
+# print results
+print("Greedy Group Optimization (max_iters=1):")
+print(f"Number of unique rulebooks found: {num_unique_rulebooks}")
+print(f"Correct classifications: {correct} out of {len(y)}")
+print(f"Accuracy: {accuracy:.4f}")
+print()
+
+greedy_rulebooks, num_unique_rulebooks, correct, accuracy, scenario_to_samples = find_scenario_groups(rulebook, X, y, y_votes, cache_dict, trajectories_dict, greedy_group_optimization, groups, max_iters=2, restricted=False, fixed_level_depth=0)
+# print results
+print("Greedy Group Optimization (max_iters=2):")
+print(f"Number of unique rulebooks found: {num_unique_rulebooks}")
+print(f"Correct classifications: {correct} out of {len(y)}")
+print(f"Accuracy: {accuracy:.4f}")
+print()
+
+brute_force_rulebooks, num_unique_rulebooks, correct, accuracy, scenario_to_samples = find_scenario_groups(rulebook, X, y, y_votes, cache_dict, trajectories_dict, brute_force_group_optimization, groups, fixed_level_depth=0)
+# print results
+print("Brute Force Group Optimization:")
+print(f"Number of unique rulebooks found: {num_unique_rulebooks}")
+print(f"Correct classifications: {correct} out of {len(y)}")
+print(f"Accuracy: {accuracy:.4f}")
