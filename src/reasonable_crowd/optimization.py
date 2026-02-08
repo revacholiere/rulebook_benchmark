@@ -24,7 +24,7 @@ def cache_rule_evaluations(
     verbose=False,
 ):
 
-    priority_order = list(nx.topological_sort(rbook.in_place_priority_graph))
+    priority_order = list(nx.topological_sort(rbook.priority_graph))
     rule_id_to_rule = rbook.rule_id_to_rule
     pbar = tqdm(total=len(priority_order), desc="Caching rule evaluations", leave=False)
 
@@ -75,12 +75,12 @@ def optimize_rulebook_grid_bruteforce(
     """
     Brute-force optimizer: tries all parameter combinations for all rules at once.
 
-    - rulebook: Rulebook object (must expose in_place_priority_graph)
+    - rulebook: Rulebook object (must expose priority_graph)
     - dataset: evaluation samples
     - rule_id_to_params: dict rule_id -> [param_name, ...]
     - rule_id_to_values: dict rule_id -> {param_name: [candidate_values]}
     """
-    graph = rulebook.in_place_priority_graph
+    graph = rulebook.priority_graph
 
     # Collect parameter search space
     search_space = []
@@ -174,7 +174,7 @@ def optimize_rulebook_grid_bruteforce_with_validation(
     verbose=0,
 ):
 
-    graph = rulebook.in_place_priority_graph
+    graph = rulebook.priority_graph
 
     # Collect parameter search space
     search_space = []
@@ -274,7 +274,7 @@ def optimize_rulebook_greedy_by_priority(
     skip: set of rule IDs to skip during optimization
     """
 
-    graph = rulebook.in_place_priority_graph
+    graph = rulebook.priority_graph
     try:
         priority_order = list(nx.topological_sort(graph))
     except Exception:
@@ -377,7 +377,7 @@ def optimize_rulebook_greedy_by_priority_with_validation(
     improves both training and validation scores.
     """
 
-    graph = rulebook.in_place_priority_graph
+    graph = rulebook.priority_graph
     try:
         priority_order = list(nx.topological_sort(graph))
     except Exception:
@@ -500,14 +500,14 @@ def is_weakly_connected(graph):
 
 def random_action(rulebook, max_attempts=10):
     """
-    Perform a random modification on the rulebook's in_place_priority_graph.
+    Perform a random modification on the rulebook's priority_graph.
     The action space includes adding, removing, or swapping edges.
-    Returns a new rulebook with an acyclic in_place_priority_graph.
+    Returns a new rulebook with an acyclic priority_graph.
     If no valid action is found after max_attempts, returns the original rulebook.
     """
     for _ in range(max_attempts):
         new_rulebook = rulebook.copy()
-        g = new_rulebook.in_place_priority_graph
+        g = new_rulebook.priority_graph
         nodes = list(g.nodes)
         edges = list(g.edges)
         # choices = ["add", "remove", "swap"]
@@ -537,7 +537,7 @@ def random_action(rulebook, max_attempts=10):
 
         # Validate the modified graph
         if is_acyclic(g) and no_redundant_edges(g) and is_weakly_connected(g):
-            new_rulebook.in_place_priority_graph = g
+            new_rulebook.priority_graph = g
             return new_rulebook
 
     # If no valid action found after max_attempts, return original rulebook
@@ -801,7 +801,7 @@ def number_of_unique_rulebooks(
         if sc > 0:
             for existing_rb in unique_rulebooks:
                 if nx.utils.graphs_equal(
-                    existing_rb.in_place_priority_graph, rb.in_place_priority_graph
+                    existing_rb.priority_graph, rb.priority_graph
                 ):
                     found = True
                     break
@@ -888,7 +888,7 @@ def find_scenario_rulebooks(
         found = False
         for existing_rb in rulebooks.values():
             if nx.utils.graphs_equal(
-                existing_rb.in_place_priority_graph, rulebook.in_place_priority_graph
+                existing_rb.priority_graph, rulebook.priority_graph
             ):
                 found = True
                 rulebooks[name] = existing_rb
@@ -929,9 +929,9 @@ def shuffle_rulebook(rulebook, seed=None):
     if seed is not None:
         random.seed(seed)
     new_rulebook = rulebook.copy()
-    g = new_rulebook.in_place_priority_graph
+    g = new_rulebook.priority_graph
     g = shuffle_graph_nodes(g, seed=seed)
-    new_rulebook.in_place_priority_graph = g
+    new_rulebook.priority_graph = g
     return new_rulebook
 
 
@@ -1037,8 +1037,8 @@ def combine_groups_in_order(g, groups, keep_relations):
 
 def group_rulebook(rulebook, groups, keep_relations):
     rb = rulebook.copy()
-    rb.in_place_priority_graph = combine_groups_in_order(
-        rulebook.in_place_priority_graph, groups, keep_relations
+    rb.priority_graph = combine_groups_in_order(
+        rulebook.priority_graph, groups, keep_relations
     )
     return rb
 
@@ -1095,7 +1095,7 @@ def greedy_group_optimization(
     """
 
     rb = rulebook.copy()
-    g = rb.in_place_priority_graph
+    g = rb.priority_graph
 
     levels = groups
     fixed_levels = []
@@ -1123,7 +1123,7 @@ def greedy_group_optimization(
                     g, fixed_levels + new_levels, keep_relations
                 )
                 new_rb = rb.copy()
-                new_rb.in_place_priority_graph = new_g
+                new_rb.priority_graph = new_g
 
                 new_score = evaluate_rulebook_with_cache(
                     new_rb, X, y, y_votes, cache_dict, trajectories_dict
@@ -1144,7 +1144,7 @@ def greedy_group_optimization(
                         g, fixed_levels + new_levels, keep_relations
                     )
                     new_rb = rb.copy()
-                    new_rb.in_place_priority_graph = new_g
+                    new_rb.priority_graph = new_g
 
                     new_score = evaluate_rulebook_with_cache(
                         new_rb, X, y, y_votes, cache_dict, trajectories_dict
@@ -1155,7 +1155,7 @@ def greedy_group_optimization(
                         best_levels = new_levels
                         improved = True
         rb = best_rb
-        g = best_rb.in_place_priority_graph
+        g = best_rb.priority_graph
         levels = best_levels
 
         iter_count += 1
@@ -1185,7 +1185,7 @@ def greedy_group_optimization_with_validation(
     """
 
     rb = rulebook.copy()
-    g = rb.in_place_priority_graph
+    g = rb.priority_graph
     levels = groups
     fixed_levels = []
     if fixed_level_depth is not None:
@@ -1214,7 +1214,7 @@ def greedy_group_optimization_with_validation(
                     g, fixed_levels + new_levels, keep_relations
                 )
                 new_rb = rb.copy()
-                new_rb.in_place_priority_graph = new_g
+                new_rb.priority_graph = new_g
 
                 train_new_score = evaluate_rulebook_with_cache(
                     new_rb, train_x, train_y, train_votes, cache_dict, trajectories_dict
@@ -1242,7 +1242,7 @@ def greedy_group_optimization_with_validation(
                         g, fixed_levels + new_levels, keep_relations
                     )
                     new_rb = rb.copy()
-                    new_rb.in_place_priority_graph = new_g
+                    new_rb.priority_graph = new_g
 
                     train_new_score = evaluate_rulebook_with_cache(
                         new_rb,
@@ -1266,7 +1266,7 @@ def greedy_group_optimization_with_validation(
                         best_levels = new_levels
                         improved = True
         rb = best_rb
-        g = best_rb.in_place_priority_graph
+        g = best_rb.priority_graph
         levels = best_levels
 
         iter_count += 1
@@ -1294,7 +1294,7 @@ def brute_force_group_optimization(
         groups = groups[fixed_level_depth + 1 :]  # only optimize lower levels
 
     rb = rulebook.copy()
-    g = rb.in_place_priority_graph
+    g = rb.priority_graph
 
     best_score = evaluate_rulebook_with_cache(
         rb, X, y, y_votes, cache_dict, trajectories_dict
@@ -1304,7 +1304,7 @@ def brute_force_group_optimization(
     for perm in itertools.permutations(groups):
         new_g = combine_groups_in_order(g, fixed_levels + list(perm), keep_relations)
         new_rb = rb.copy()
-        new_rb.in_place_priority_graph = new_g
+        new_rb.priority_graph = new_g
 
         new_score = evaluate_rulebook_with_cache(
             new_rb, X, y, y_votes, cache_dict, trajectories_dict
@@ -1340,7 +1340,7 @@ def brute_force_group_optimization_with_validation(
         groups = groups[fixed_level_depth + 1 :]  # only optimize lower levels
 
     rb = rulebook.copy()
-    g = rb.in_place_priority_graph
+    g = rb.priority_graph
 
     train_best_score = evaluate_rulebook_with_cache(
         rb, X_train, y_train, votes_train, cache_dict, trajectories_dict
@@ -1353,7 +1353,7 @@ def brute_force_group_optimization_with_validation(
     for perm in itertools.permutations(groups):
         new_g = combine_groups_in_order(g, fixed_levels + list(perm), keep_relations)
         new_rb = rb.copy()
-        new_rb.in_place_priority_graph = new_g
+        new_rb.priority_graph = new_g
 
         new_train_score = evaluate_rulebook_with_cache(
             new_rb, X_train, y_train, votes_train, cache_dict, trajectories_dict
@@ -1389,7 +1389,7 @@ def find_scenario_groups(
     num_unique_rulebooks = 0
     scenario_to_groups = {}
     if groups is None:
-        groups = group_nodes_by_level(rulebook.in_place_priority_graph)
+        groups = group_nodes_by_level(rulebook.priority_graph)
     grouped_rulebook = group_rulebook(rulebook, groups, keep_relations)
 
     pbar = tqdm(
@@ -1416,7 +1416,7 @@ def find_scenario_groups(
         found = False
         for existing_rb in rulebooks.values():
             if nx.utils.graphs_equal(
-                existing_rb.in_place_priority_graph, rulebook.in_place_priority_graph
+                existing_rb.priority_graph, rulebook.priority_graph
             ):
                 found = True
                 rulebooks[name] = existing_rb

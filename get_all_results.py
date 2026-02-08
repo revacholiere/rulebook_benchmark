@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
+from collections import Counter
 
 from reasonable_crowd.dataset import (
     build_evaluation_dataset,
@@ -77,11 +78,9 @@ df["votes"] = y_votes
 df["agreement"] = y_agreement
 
 print(df.head())
+rulebook_file = "src/reasonable_crowd/reasonable_crowd.graph"
 
-rb = Rulebook(
-    rule_file="src/reasonable_crowd/reasonable_crowd_rule_functions.py",
-    rulebook_file="src/reasonable_crowd/reasonable_crowd_5.graph",
-)
+
 rule_id_to_rule = {
     1: f1,
     2: f2,
@@ -99,7 +98,7 @@ rule_id_to_rule = {
     17: f17,
     18: f18,
 }
-rulebook = InPlaceRulebook(rb.priority_graph, rule_id_to_rule)
+rulebook = InPlaceRulebook(rule_id_to_rule, rulebook_file)
 
 
 rule_id_to_params = {
@@ -479,10 +478,10 @@ rule_id_to_rule_sum = {
     18: f18,
 }
 
-rulebook = InPlaceRulebook(rb.priority_graph, rule_id_to_rule)
-rulebook_alt = InPlaceRulebook(rb.priority_graph, rule_id_to_rule_alt)
-rulebook_side = InPlaceRulebook(rb.priority_graph, rule_id_to_rule_side)
-rulebook_sum = InPlaceRulebook(rb.priority_graph, rule_id_to_rule_sum)
+rulebook = InPlaceRulebook(rule_id_to_rule, rulebook_file)
+rulebook_alt = InPlaceRulebook(rule_id_to_rule_alt, rulebook_file)
+rulebook_side = InPlaceRulebook(rule_id_to_rule_side, rulebook_file)
+rulebook_sum = InPlaceRulebook(rule_id_to_rule_sum, rulebook_file)
 rule_id_to_params = {
     4: ["threshold"],
     6: ["threshold"],
