@@ -25,10 +25,12 @@ class Result:
 
 
 class Rule:
-    def __init__(self, calculate_violation, aggregation_method, **kwargs):
+    def __init__(self, calculate_violation, aggregation_method, name, rule_id, **kwargs):
         self.calculate_violation = calculate_violation
         self.aggregation_method = aggregation_method
         self.parameters = kwargs
+        self.name = name
+        self.id = rule_id
 
     def __call__(self, handler, step, **runtime_params):
         # merge init parameters and runtime ones
@@ -36,7 +38,7 @@ class Rule:
         return self.calculate_violation(handler, step, **params)
     
     def copy(self):
-        return Rule(self.calculate_violation, self.aggregation_method, **self.parameters)
+        return Rule(self.calculate_violation, self.aggregation_method, self.name, self.id, **self.parameters)
 
     def evaluate(self, handler, **runtime_params):
         result = Result(aggregation_method=self.aggregation_method)

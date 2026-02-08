@@ -15,7 +15,7 @@ import pickle
 from sklearn.model_selection import train_test_split
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
 from sklearn.model_selection import KFold
-from reasonable_crowd.visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
+from reasonable_crowd.rulebook_visualization import plot_topological_graph, plot_two_rulebooks_side_by_side
 
 SEED = 50
 NUM_RUNS = 10

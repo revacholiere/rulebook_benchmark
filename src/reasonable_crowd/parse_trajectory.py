@@ -4,7 +4,7 @@ import numpy as np
 from scenic.core.vectors import Vector
 from cached_property import cached_property
 from rulebook_benchmark.realization import State, Realization, RealizationObject
-from rulebook_benchmark.roads import OrientationVectorPlaceholder
+from reasonable_crowd.roads import OrientationVectorPlaceholder
 import orjson
 # example trajectory data
 

@@ -3,25 +3,33 @@ from rulebook_benchmark.rule_functions import RuleEngine
 import networkx as nx
 from tqdm import tqdm
 from rulebook_benchmark.rulebook import Relation
+from rulebook_benchmark.rulebook import Rulebook
 
-class InPlaceRulebook:
-    def __init__(self, priority_graph, rule_id_to_rule):
-        # copy the priority graph structure
-        self.in_place_priority_graph = nx.DiGraph()
-        self.rule_id_to_rule = rule_id_to_rule
-        self.rule_ids = list(priority_graph.nodes)
-        for node in priority_graph.nodes(data=True):
-            self.in_place_priority_graph.add_node(node[0], rule=self.rule_id_to_rule[node[0]])
-            #self.in_place_priority_graph.add_node(node[0], rules=node)
-        for edge in priority_graph.edges(data=True):
-            self.in_place_priority_graph.add_edge(edge[0], edge[1])
+class InPlaceRulebook(Rulebook):
+    def __init__(self, rule_id_to_rule: dict, rulebook_file):
+        super().__init__(rule_id_to_rule, rulebook_file)
+        
+        
             
     def copy(self):
-        return InPlaceRulebook(self.in_place_priority_graph, self.rule_id_to_rule)
+        copy_rules = {}
+        for rule_id, rule in self.rules.items():
+            copy_rules[rule_id] = rule.copy()
+            
+        # create new rulebook, then copy the priority graph structure
+        new_rulebook = InPlaceRulebook(copy_rules, self.rulebook_file)
+        # Sever all edges, then copy edges from original graph
+        new_rulebook.priority_graph.remove_edges_from(list(new_rulebook.priority_graph.edges()))
+        new_rulebook.priority_graph.add_edges_from(self.priority_graph.edges())
+        
+        return new_rulebook
+        
+        
+        
     
     @property
     def root_nodes(self):
-        return [n for n, d in self.in_place_priority_graph.in_degree() if d == 0]
+        return [n for n, d in self.priority_graph.in_degree() if d == 0]
 
     def evaluate(self, realization):
         rule_engine = RuleEngine(self.rule_id_to_rule)
@@ -49,38 +57,44 @@ class InPlaceRulebook:
 
         def win_condition(set1, set2):
             for rule in set1:
-                if all(nx.has_path(self.in_place_priority_graph, rule, other) for other in set2):
+                if all(nx.has_path(self.priority_graph, rule, other) for other in set2):
                     return True, rule
             return False, None
         
-        win_1, winning_rule_1 = win_condition(r1_advocates, r2_advocates)
+        win_1, winning_node_1 = win_condition(r1_advocates, r2_advocates)
         
 
         if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_1:
-            return Relation.LARGER, winning_rule_1
+            return Relation.LARGER, winning_node_1
 
-        win_2, winning_rule_2 = win_condition(r2_advocates, r1_advocates)
+        win_2, winning_node_2 = win_condition(r2_advocates, r1_advocates)
         
         if (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_2:
-            return Relation.SMALLER, winning_rule_2
+            return Relation.SMALLER, winning_node_2
         elif len(r1_advocates) == 0 and len(r2_advocates) == 0:
             return Relation.EQUAL, None
         else:
             return Relation.NONCOMPARABLE, None
 
         
-    def _compare_trajectories(self, rule_id, handler1, handler2, r1_advocates, r2_advocates):
-        rule = self.in_place_priority_graph.nodes[rule_id]['rule']
-        result1 = rule.evaluate(handler1)
-        result2 = rule.evaluate(handler2)
+    def _compare_trajectories(self, node_id, handler1, handler2, r1_advocates, r2_advocates):
+        rules = self.priority_graph.nodes[node_id]['rules']
+        result1 = 0
+        result2 = 0
+        for rule_id, rule in rules.items():
+            result1 += rule.evaluate(handler1)
+            result2 += rule.evaluate(handler2)
+            
+        result1 /= len(rules)
+        result2 /= len(rules)
 
         if result1 < result2:
-            r1_advocates.add(rule_id)
+            r1_advocates.add(node_id)
         elif result1 > result2:
-            r2_advocates.add(rule_id)
+            r2_advocates.add(node_id)
         else:
-            for child_rule_id in self.in_place_priority_graph.successors(rule_id):
-                self._compare_trajectories(child_rule_id, handler1, handler2, r1_advocates, r2_advocates)
+            for child_node_id in self.priority_graph.successors(node_id):
+                self._compare_trajectories(child_node_id, handler1, handler2, r1_advocates, r2_advocates)
         
 
     def compare_results(self, results1, results2):
@@ -92,34 +106,41 @@ class InPlaceRulebook:
 
         def win_condition(set1, set2):
             for rule in set1:
-                if all(nx.has_path(self.in_place_priority_graph, rule, other) for other in set2):
+                if all(nx.has_path(self.priority_graph, rule, other) for other in set2):
                     return True, rule
             return False, None
 
-        win_1, winning_rule_1 = win_condition(r1_advocates, r2_advocates)
+        win_1, winning_node_1 = win_condition(r1_advocates, r2_advocates)
 
         if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_1:
-            return Relation.LARGER, winning_rule_1
+            return Relation.LARGER, winning_node_1
 
-        win_2, winning_rule_2 = win_condition(r2_advocates, r1_advocates)
+        win_2, winning_node_2 = win_condition(r2_advocates, r1_advocates)
         if (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_2:
-            return Relation.SMALLER, winning_rule_2
+            return Relation.SMALLER, winning_node_2
         elif len(r1_advocates) == 0 and len(r2_advocates) == 0:
             return Relation.EQUAL, None
         else:
             return Relation.NONCOMPARABLE, None
 
-    def _compare_results(self, rule_id, results1, results2, r1_advocates, r2_advocates):
-        result1 = results1[rule_id]
-        result2 = results2[rule_id]
+    def _compare_results(self, node_id, results1, results2, r1_advocates, r2_advocates):
+        result1 = 0
+        result2 = 0
+        rules = self.priority_graph.nodes[node_id]['rules']
+        for rule_id, rule in rules.items():
+            result1 += results1[rule_id]
+            result2 += results2[rule_id]
+            
+        result1 /= len(rules)
+        result2 /= len(rules)
 
         if result1 < result2:
-            r1_advocates.add(rule_id)
+            r1_advocates.add(node_id)
         elif result1 > result2:
-            r2_advocates.add(rule_id)
+            r2_advocates.add(node_id)
         else:
-            for child_rule_id in self.in_place_priority_graph.successors(rule_id):
-                self._compare_results(child_rule_id, results1, results2, r1_advocates, r2_advocates)
+            for child_node_id in self.priority_graph.successors(node_id):
+                self._compare_results(child_node_id, results1, results2, r1_advocates, r2_advocates)
         
 
             
