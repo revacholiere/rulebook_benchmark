@@ -5,8 +5,13 @@ import shapely
 from numpy.linalg import norm
 
 from rulebook_benchmark.rulebook import Rule
-from rulebook_benchmark.utils import (angle_between, continuous_ttc, early_ttc,
-                                      generalized_collision, normalize_vector)
+from rulebook_benchmark.utils import (
+    angle_between,
+    continuous_ttc,
+    early_ttc,
+    generalized_collision,
+    normalize_vector,
+)
 
 
 def vru_collision(handler, step, car_mass=1500, vru_mass=70, momentum=False):

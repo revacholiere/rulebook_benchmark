@@ -6,8 +6,7 @@ from cached_property import cached_property
 from scenic.core.vectors import Vector
 
 from reasonable_crowd.roads import OrientationVectorPlaceholder
-from rulebook_benchmark.realization import (Realization, RealizationObject,
-                                            State)
+from rulebook_benchmark.realization import Realization, RealizationObject, State
 
 # example trajectory data
 

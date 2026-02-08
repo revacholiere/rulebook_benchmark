@@ -5,18 +5,39 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
 
-from reasonable_crowd.dataset import (build_evaluation_dataset,
-                                      get_trajectories, load_annotations)
+from reasonable_crowd.dataset import (
+    build_evaluation_dataset,
+    get_trajectories,
+    load_annotations,
+)
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
 from reasonable_crowd.InPlaceRulebook import InPlaceRulebook
 from reasonable_crowd.optimization import (
-    brute_force_group_optimization, cache_rule_evaluations,
-    find_scenario_groups, greedy_group_optimization, group_rulebook,
-    optimize_rulebook_greedy_by_priority)
+    brute_force_group_optimization,
+    cache_rule_evaluations,
+    find_scenario_groups,
+    greedy_group_optimization,
+    group_rulebook,
+    optimize_rulebook_greedy_by_priority,
+)
 from reasonable_crowd.parse_map import parse_map
-from rulebook_benchmark.rule_functions import (f1, f2, f3, f4, f5, f6, f7, f8,
-                                               f9, f11, f12, f13, f15, f17,
-                                               f18)
+from rulebook_benchmark.rule_functions import (
+    f1,
+    f2,
+    f3,
+    f4,
+    f5,
+    f6,
+    f7,
+    f8,
+    f9,
+    f11,
+    f12,
+    f13,
+    f15,
+    f17,
+    f18,
+)
 from rulebook_benchmark.rulebook import Rulebook
 
 SEED = 50
@@ -375,8 +396,15 @@ print("Alternative rule definition comparison:")
 print("----------------------")
 
 
-from rulebook_benchmark.rule_functions import (f7_alt, f11_sum, f11_v, f12_sum,
-                                               f12_v, f13_sum, f13_v)
+from rulebook_benchmark.rule_functions import (
+    f7_alt,
+    f11_sum,
+    f11_v,
+    f12_sum,
+    f12_v,
+    f13_sum,
+    f13_v,
+)
 
 rb = Rulebook(
     rule_file="reasonable_crowd_rule_functions.py",

@@ -7,8 +7,10 @@ import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
-from reasonable_crowd.evaluation import (evaluate_rule_with_cache,
-                                         evaluate_rulebook_with_cache)
+from reasonable_crowd.evaluation import (
+    evaluate_rule_with_cache,
+    evaluate_rulebook_with_cache,
+)
 
 
 def cache_rule_evaluations(

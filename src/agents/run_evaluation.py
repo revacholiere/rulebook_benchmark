@@ -15,12 +15,27 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from rulebook_benchmark.process_trajectory import process_trajectory
 from rulebook_benchmark.realization import Realization, VariableHandler
-from rulebook_benchmark.rule_functions import (Result, RuleEngine, f1, f2, f3,
-                                               f4, f5, f6, f7, f8, f9, f11,
-                                               f12, f13, f15, f17, f18)
+from rulebook_benchmark.rule_functions import (
+    Result,
+    RuleEngine,
+    f1,
+    f2,
+    f3,
+    f4,
+    f5,
+    f6,
+    f7,
+    f8,
+    f9,
+    f11,
+    f12,
+    f13,
+    f15,
+    f17,
+    f18,
+)
 from rulebook_benchmark.rulebook import Rulebook
-from rulebook_benchmark.samplers import (CrossEntropySampler,
-                                         MultiArmedBanditSampler)
+from rulebook_benchmark.samplers import CrossEntropySampler, MultiArmedBanditSampler
 from scenarios.run_scenic_test import visualize_simulation
 
 ruleset = {

@@ -3,8 +3,14 @@ import os
 import geopandas as gpd
 import shapely
 
-from reasonable_crowd.roads import (Intersection, Lane, LaneGroup, Maneuver,
-                                    Network, Road)
+from reasonable_crowd.roads import (
+    Intersection,
+    Lane,
+    LaneGroup,
+    Maneuver,
+    Network,
+    Road,
+)
 
 S_main_lane_boundaries = {
     0: (7, 0, -1),
