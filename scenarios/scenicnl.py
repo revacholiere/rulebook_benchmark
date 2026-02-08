@@ -1,20 +1,21 @@
 from google import genai
 
+
 # Scenic description
 def get_scenic_description():
     prompt = ""
     prompt += "You are an expert in the Scenic programming language. Your task is to convert natural language descriptions of scenarios into valid Scenic code.\n"
-    #prompt += "The syntax of the Scenic language can be found here: https://docs.scenic-lang.org/en/latest/index.html\n"
+    # prompt += "The syntax of the Scenic language can be found here: https://docs.scenic-lang.org/en/latest/index.html\n"
     prompt += "A Scenic program consists of several sections, including:\n"
     prompt += "- 'MAP AND MODEL': for specifying the map and driving models used in the scenario\n"
     prompt += "- 'CONSTANTS': for defining parameters and constants\n"
     prompt += "- 'AGENT BEHAVIORS': for defining bahaviors of agents in the scenario\n"
     prompt += "- 'SPATIAL RELATIONS': for specifying the initial positions and trajectories (if needed) of agents\n"
     prompt += "- 'SCENARIO SPECIFICATION': for defining the object instances with their behaviors\n"
-    #prompt += "- 'REQUIREMENTS': for specifying the conditions that must be met in the scenario as well as the termination condition\n"
+    # prompt += "- 'REQUIREMENTS': for specifying the conditions that must be met in the scenario as well as the termination condition\n"
     prompt += "Each section is clearly marked with a header (e.g., '#################################').\n"
     prompt += "When writing the Scenic code, ensure that the code is syntactically correct and all necessary sections are included and properly formatted.\n"
-    
+
     # Detailed guide
     prompt += "Below is a detailed syntax guide for every section. PLEASE STRICTLY FOLLOW THE SYNTAX. DO NOT HALLUCINATE.\n"
     prompt += _get_model_guide()
@@ -25,6 +26,7 @@ def get_scenic_description():
 
     return prompt
 
+
 def _get_model_guide():
     prompt = ""
     prompt += "### MAP AND MODEL ###\n"
@@ -34,6 +36,7 @@ def _get_model_guide():
     prompt += "param POLICY = 'built_in'\n\n"
     return prompt
 
+
 def _get_constants_guide():
     prompt = ""
     prompt += "### CONSTANTS ###\n"
@@ -41,6 +44,7 @@ def _get_constants_guide():
     prompt += "Constants can be defined using simple assignments (e.g., MODEL = 'vehicle.lincoln.mkz_2017', EGO_INIT_DIST = [20, 25]).\n"
     prompt += "Parameters that need to be sampled during scenario generation can be defined using the 'param' keyword along with 'VerifaiRange' for continuous ranges (e.g., param EGO_SPEED = VerifaiRange(7, 10)). Later when using these parameters in the scenario, refer to them as 'globalParameters.PARAM_NAME'.\n\n"
     return prompt
+
 
 def _get_agent_behaviors_guide():
     prompt = ""
@@ -59,8 +63,10 @@ def _get_agent_behaviors_guide():
     prompt += "- SetSpeedAction(speed)\n"
     prompt += "- SetVelocityAction(xVel, yVel)\n"
     prompt += "You can also use try-interrupt statements to define complex behaviors. The 'try' block contains the main behavior, while the 'interrupt when' clauses specify conditions that can interrupt the main behavior and trigger alternative actions or behaviors.\n"
-    prompt += "Here is an example of defining a behavior with try-interrupt statements:\n"
-    prompt += "behavior EgoBehavior(trajectory):\n" 
+    prompt += (
+        "Here is an example of defining a behavior with try-interrupt statements:\n"
+    )
+    prompt += "behavior EgoBehavior(trajectory):\n"
     prompt += "    try:\n"
     prompt += "        do FollowTrajectoryBehavior(target_speed=globalParameters.EGO_SPEED, trajectory=trajectory)\n"
     prompt += "    interrupt when withinDistanceToAnyObjs(self, globalParameters.SAFETY_DIST):\n"
@@ -75,6 +81,7 @@ def _get_agent_behaviors_guide():
     prompt += "- apparent heading of vector [from vector]: computes the apparent heading of the vector, with respect to the line of sight from ego (or the position provided with the optional from vector)\n"
     prompt += "- vector in region: checks if the given position is inside the specified region\n\n"
     return prompt
+
 
 def _get_spatial_relations_guide():
     prompt = ""
@@ -95,13 +102,16 @@ def _get_spatial_relations_guide():
     prompt += "When defining trajectories, you can create a list of lanes that the agent will follow during the scenario.\n\n"
     return prompt
 
+
 def _get_scenario_specification_guide():
     prompt = ""
     prompt += "### SCENARIO SPECIFICATION ###\n"
     prompt += "In this section, define the object instances involved in the scenario along with their behaviors.\n"
     prompt += "Each object instance should be created using the 'new' keyword followed by the object type (e.g., Car) and its initial position.\n"
     prompt += "You can specify additional properties for each object, such as the blueprint model and the behavior to be used.\n"
-    prompt += "Here is an example of defining an ego vehicle and an adversary vehicle:\n"
+    prompt += (
+        "Here is an example of defining an ego vehicle and an adversary vehicle:\n"
+    )
     prompt += "ego = new Car at egoSpawnPt,\n"
     prompt += "    with blueprint MODEL,\n"
     prompt += "    with behavior EgoBehavior(egoTrajectory)\n"
@@ -112,6 +122,7 @@ def _get_scenario_specification_guide():
     prompt += "Note that within requirements and termination conditions parameters cannot be accessed, only constants can be used.\n\n"
     return prompt
 
+
 # Examples
 def get_examples():
     prompt = ""
@@ -119,8 +130,9 @@ def get_examples():
     prompt += get_example_1()
     prompt += get_example_2()
     prompt += get_example_3()
-    #prompt += get_example_4()
+    # prompt += get_example_4()
     return prompt
+
 
 # Example 1 (examples/carla/NHTSA_Scenarios/intersection/intersection_01.scenic)
 def get_example_1(id=1):
@@ -169,7 +181,9 @@ def get_example_1(id=1):
     prompt += "# SPATIAL RELATIONS             #\n"
     prompt += "#################################\n"
     prompt += "\n"
-    prompt += "intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))\n"
+    prompt += (
+        "intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))\n"
+    )
     prompt += "\n"
     prompt += "egoInitLane = Uniform(*intersection.incomingLanes)\n"
     prompt += "egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInitLane.maneuvers))\n"
@@ -196,12 +210,15 @@ def get_example_1(id=1):
     prompt += "    with blueprint MODEL,\n"
     prompt += "    with behavior FollowTrajectoryBehavior(target_speed=globalParameters.ADV_SPEED, trajectory=advTrajectory)\n"
     prompt += "\n"
-    prompt += "require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]\n"
+    prompt += (
+        "require EGO_INIT_DIST[0] <= (distance to intersection) <= EGO_INIT_DIST[1]\n"
+    )
     prompt += "require ADV_INIT_DIST[0] <= (distance from adversary to intersection) <= ADV_INIT_DIST[1]\n"
     prompt += "terminate when (distance to egoSpawnPt) > TERM_DIST\n"
     prompt += "``` \n\n"
-    
+
     return prompt
+
 
 # Example 2 (examples/carla/NHTSA_Scenarios/bypassing/bypassing_01.scenic)
 def get_example_2(id=2):
@@ -270,7 +287,9 @@ def get_example_2(id=2):
     prompt += "    with blueprint MODEL,\n"
     prompt += "    with behavior EgoBehavior()\n"
     prompt += "\n"
-    prompt += "adversary = new Car following roadDirection for globalParameters.ADV_DIST,\n"
+    prompt += (
+        "adversary = new Car following roadDirection for globalParameters.ADV_DIST,\n"
+    )
     prompt += "    with blueprint MODEL,\n"
     prompt += "    with behavior FollowLaneBehavior(target_speed=globalParameters.ADV_SPEED)\n"
     prompt += "\n"
@@ -278,8 +297,9 @@ def get_example_2(id=2):
     prompt += "require (distance from adversary to intersection) > INIT_DIST\n"
     prompt += "require always (adversary.laneSection._fasterLane is not None)\n"
     prompt += "``` \n\n"
-    
+
     return prompt
+
 
 # Example 3 (crash_waymo-august-12-2019)
 def get_example_3(id=3):
@@ -299,8 +319,8 @@ def get_example_3(id=3):
     prompt += "# CONSTANTS                     #\n"
     prompt += "#################################\n"
     prompt += "\n"
-    prompt += "MODEL = \"vehicle.toyota.prius\"\n"
-    prompt += "BICYCLE_MODEL = \"vehicle.bh.crossbike\"\n"
+    prompt += 'MODEL = "vehicle.toyota.prius"\n'
+    prompt += 'BICYCLE_MODEL = "vehicle.bh.crossbike"\n'
     prompt += "\n"
     prompt += "param WAYMO_SPEED = VerifaiRange(2.5, 3.5)\n"
     prompt += "param WAYMO_BRAKE = VerifaiRange(0.5, 1.0)\n"
@@ -334,7 +354,9 @@ def get_example_3(id=3):
     prompt += "# SPATIAL RELATIONS             #\n"
     prompt += "#################################\n"
     prompt += "\n"
-    prompt += "intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))\n"
+    prompt += (
+        "intersection = Uniform(*filter(lambda i: i.is4Way, network.intersections))\n"
+    )
     prompt += "\n"
     prompt += "egoInitLane = Uniform(*intersection.incomingLanes)\n"
     prompt += "egoManeuver = Uniform(*filter(lambda m: m.type is ManeuverType.STRAIGHT, egoInitLane.maneuvers))\n"
@@ -366,11 +388,14 @@ def get_example_3(id=3):
     prompt += "#require ego.laneSection._slowerLane is not None\n"
     prompt += "require bicycle.laneSection._fasterLane is not None\n"
     prompt += "require next ego.lane is not bicycle.lane\n"
-    prompt += "terminate when (distance to adversary) < (ego.length + adversary.length) / 2\n"
+    prompt += (
+        "terminate when (distance to adversary) < (ego.length + adversary.length) / 2\n"
+    )
     prompt += "terminate when (distance to egoSpawnPt) > TERM_DIST\n"
     prompt += "``` \n\n"
-    
+
     return prompt
+
 
 # Example 4 (crash_apple_082321)
 def get_example_4(id=4):
@@ -390,8 +415,8 @@ def get_example_4(id=4):
     prompt += "# CONSTANTS                     #\n"
     prompt += "#################################\n"
     prompt += "\n"
-    prompt += "APPLE_MODEL = \"vehicle.toyota.prius\"\n"
-    prompt += "SUBARU_MODEL = \"vehicle.toyota.prius\"\n"
+    prompt += 'APPLE_MODEL = "vehicle.toyota.prius"\n'
+    prompt += 'SUBARU_MODEL = "vehicle.toyota.prius"\n'
     prompt += "\n"
     prompt += "param SUBARU_REVERSE_THROTTLE = VerifaiRange(0.3, 0.6)\n"
     prompt += "param ADVERSARY_X_OFFSET = VerifaiRange(-5, -3)\n"
@@ -408,7 +433,9 @@ def get_example_4(id=4):
     prompt += "\n"
     prompt += "behavior SubaruReverseBehavior():\n"
     prompt += "    while True:\n"
-    prompt += "        take SetThrottleAction(globalParameters.SUBARU_REVERSE_THROTTLE)\n"
+    prompt += (
+        "        take SetThrottleAction(globalParameters.SUBARU_REVERSE_THROTTLE)\n"
+    )
     prompt += "\n"
     prompt += "#################################\n"
     prompt += "# SPATIAL RELATIONS             #\n"
@@ -435,7 +462,9 @@ def get_example_4(id=4):
     prompt += "# REQUIREMENTS                  #\n"
     prompt += "#################################\n"
     prompt += "\n"
-    prompt += "terminate when (distance to adversary) < (ego.length + adversary.length) / 2\n"
+    prompt += (
+        "terminate when (distance to adversary) < (ego.length + adversary.length) / 2\n"
+    )
     prompt += "\n"
     prompt += "#################################\n"
     prompt += "# RECORDING                     #\n"
@@ -443,8 +472,9 @@ def get_example_4(id=4):
     prompt += "\n"
     prompt += "record ego._boundingPolygon as egoPoly\n"
     prompt += "record adversary._boundingPolygon as advPoly\n\n"
-    
+
     return prompt
+
 
 # Instruction
 def get_instruction():
@@ -452,12 +482,13 @@ def get_instruction():
     prompt += "Please just return the Scenic program following the format of the provided example. DO NOT include any additional text or explanations. DO NOT ADD COMMENTS in the generated Scenic program!\n"
     return prompt
 
+
 if __name__ == "__main__":
     reports = [
         "apple_031522-pdf",
-        "apple_082321-pdf", # generated
+        "apple_082321-pdf",  # generated
         "apple_09292023-pdf",
-        "apple_10232023-pdf", # generated
+        "apple_10232023-pdf",  # generated
         "apple_111121-pdf",
         "apple_120621-pdf",
         "apple_122022-pdf",
@@ -562,9 +593,9 @@ if __name__ == "__main__":
         "waymo_120122-pdf",
         "waymo_120721-pdf",
         "waymo_122920-pdf",
-        "waymo-collision-report-august-12-2019-pdf", # generated
+        "waymo-collision-report-august-12-2019-pdf",  # generated
         "waymo-collision-report-august-13-2019-pdf",
-        "waymo-collision-report-august-9-2019-1-pdf", # generated
+        "waymo-collision-report-august-9-2019-1-pdf",  # generated
         "waymo-collision-report-august-9-2019-2-pdf",
         "waymo-collision-report-december-20-2019-pdf",
         "waymo-collision-report-february-10-2019-pdf",
@@ -613,7 +644,7 @@ if __name__ == "__main__":
         "zoox_112022-pdf",
         "zoox_112822-pdf",
         "zoox-collision-report-february-26-2020-1-pdf",
-        "zoox-collision-report-february-26-2020-2-pdf"
+        "zoox-collision-report-february-26-2020-2-pdf",
     ]
 
     report_path = "../../ScenarioNL-CA-AV-Crash/crash_reports/hard/"
@@ -623,7 +654,7 @@ if __name__ == "__main__":
         description = fr.read()
         description = " ".join(description.split())
         fr.close()
-        
+
         prompt = ""
         prompt += get_scenic_description()
         prompt += get_examples()
@@ -631,21 +662,21 @@ if __name__ == "__main__":
         prompt += description
         prompt += "\n\n"
         prompt += get_instruction()
-        #print(prompt)
-        
+        # print(prompt)
+
         print("Waiting for response...")
-        client = genai.Client(api_key="") # replace with your gemini API key
+        client = genai.Client(api_key="")  # replace with your gemini API key
         chat = client.chats.create(model="gemini-2.5-flash")
         response = chat.send_message(prompt)
-        #print(response.text)
-        
+        # print(response.text)
+
         fw = open("crash_gemini/crash_" + report + "_gemini.scenic", "w")
-        fw.write('\"\"\"\n')
+        fw.write('"""\n')
         fw.write(f"TITLE: {report}\n")
         fw.write(f"DESCRIPTION: {description}\n")
         fw.write(f"SOURCE: California DMV Crash Reports\n")
         fw.write(f"GENERATED BY: Gemini-2.5-Flash\n")
-        fw.write('\"\"\"\n\n')
+        fw.write('"""\n\n')
         scenic_program = "\n".join(response.text.splitlines()[1:-1])
         fw.write(scenic_program)
         fw.close()

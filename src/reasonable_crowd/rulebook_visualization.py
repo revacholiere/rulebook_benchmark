@@ -1,12 +1,18 @@
-import networkx as nx
 import matplotlib.pyplot as plt
-
+import networkx as nx
 import numpy as np
 
-def plot_topological_graph(G, figsize=(8,6), node_size=500,
-                           layer_gap=1.5, horiz_gap=1.5,
-                           scenario_name=None, weights=None,
-                           rule_id_to_name=None):
+
+def plot_topological_graph(
+    G,
+    figsize=(8, 6),
+    node_size=500,
+    layer_gap=1.5,
+    horiz_gap=1.5,
+    scenario_name=None,
+    weights=None,
+    rule_id_to_name=None,
+):
     """
     Plot a DAG so that topologically earlier nodes are higher.
     Nodes at the same depth (no. of hops from a root) share the same row.
@@ -57,34 +63,46 @@ def plot_topological_graph(G, figsize=(8,6), node_size=500,
 
     plt.figure(figsize=figsize)
     nx.draw_networkx_edges(G, pos, arrows=True, arrowsize=10, width=1)
-    nx.draw_networkx_nodes(G, pos,
-                           node_color=[colors[n] for n in G.nodes()],
-                           node_size=node_size,
-                           edgecolors='black')
-    nx.draw_networkx_labels(G, pos, font_color='white', font_size=8)
+    nx.draw_networkx_nodes(
+        G,
+        pos,
+        node_color=[colors[n] for n in G.nodes()],
+        node_size=node_size,
+        edgecolors="black",
+    )
+    nx.draw_networkx_labels(G, pos, font_color="white", font_size=8)
 
     # Add rule names if provided
     if rule_id_to_name:
         for n, (x, y) in pos.items():
             if n in rule_id_to_name:
-                plt.text(x + 0.25, y, rule_id_to_name[n],
-                         fontsize=7, color='black', va='center')
+                plt.text(
+                    x + 0.25,
+                    y,
+                    rule_id_to_name[n],
+                    fontsize=7,
+                    color="black",
+                    va="center",
+                )
 
     if scenario_name:
         plt.title(f"Rulebook Priority Graph for Scenario: {scenario_name}", pad=10)
 
-    plt.axis('off')
+    plt.axis("off")
     plt.tight_layout()
     plt.show()
-    
-    
-    
 
 
-def plot_group_topological_graph(G, colors, figsize=(8,6), node_size=500,
-                           layer_gap=1.5, horiz_gap=1.5,
-                           scenario_name=None,
-                           rule_id_to_name=None):
+def plot_group_topological_graph(
+    G,
+    colors,
+    figsize=(8, 6),
+    node_size=500,
+    layer_gap=1.5,
+    horiz_gap=1.5,
+    scenario_name=None,
+    rule_id_to_name=None,
+):
     """
     Plot a DAG so that topologically earlier nodes are higher.
     Nodes at the same depth (no. of hops from a root) share the same row.
@@ -115,40 +133,53 @@ def plot_group_topological_graph(G, colors, figsize=(8,6), node_size=500,
         for x, node in zip(xs, nodes):
             pos[node] = (x, y)
 
-   
     # Color node groups - colors = {rule_id:color}
     plt.figure(figsize=figsize)
     nx.draw_networkx_edges(G, pos, arrows=True, arrowsize=10, width=1)
-    nx.draw_networkx_nodes(G, pos,
-                           node_color=[colors.get(n, (0, 0, 0, 0.3)) for n in G.nodes()],
-                           node_size=node_size,
-                           edgecolors='black')
-    nx.draw_networkx_labels(G, pos, font_color='white', font_size=8)
+    nx.draw_networkx_nodes(
+        G,
+        pos,
+        node_color=[colors.get(n, (0, 0, 0, 0.3)) for n in G.nodes()],
+        node_size=node_size,
+        edgecolors="black",
+    )
+    nx.draw_networkx_labels(G, pos, font_color="white", font_size=8)
 
     # Add rule names if provided
     if rule_id_to_name:
         for n, (x, y) in pos.items():
             if n in rule_id_to_name:
-                plt.text(x + 0.25, y, rule_id_to_name[n],
-                         fontsize=7, color='black', va='center')
+                plt.text(
+                    x + 0.25,
+                    y,
+                    rule_id_to_name[n],
+                    fontsize=7,
+                    color="black",
+                    va="center",
+                )
 
     if scenario_name:
         plt.title(f"Rulebook Priority Graph for Scenario: {scenario_name}", pad=10)
 
-    plt.axis('off')
+    plt.axis("off")
     plt.tight_layout()
-    plt.show()    
+    plt.show()
 
-    
-    
-    
-    
-    
-def plot_two_rulebooks_side_by_side(G1, G2, weights1=None, weights2=None,
-                                figsize=(12,6), node_size=500,
-                                layer_gap=1.5, horiz_gap=1.5, x_offset=8,
-                                scenario_name=None, scenario_name2=None,
-                                rule_id_to_name=None):
+
+def plot_two_rulebooks_side_by_side(
+    G1,
+    G2,
+    weights1=None,
+    weights2=None,
+    figsize=(12, 6),
+    node_size=500,
+    layer_gap=1.5,
+    horiz_gap=1.5,
+    x_offset=8,
+    scenario_name=None,
+    scenario_name2=None,
+    rule_id_to_name=None,
+):
 
     def topological_positions(G, x_shift=0):
         depth = {}
@@ -184,8 +215,8 @@ def plot_two_rulebooks_side_by_side(G1, G2, weights1=None, weights2=None,
             colors[n] = (0, 0, 0, a)
         return colors
 
-    pos1 = topological_positions(G1, x_shift=-x_offset/2)
-    pos2 = topological_positions(G2, x_shift=+x_offset/2)
+    pos1 = topological_positions(G1, x_shift=-x_offset / 2)
+    pos2 = topological_positions(G2, x_shift=+x_offset / 2)
 
     colors1 = normalize_colors(G1, weights1)
     colors2 = normalize_colors(G2, weights2)
@@ -194,24 +225,38 @@ def plot_two_rulebooks_side_by_side(G1, G2, weights1=None, weights2=None,
 
     def draw_graph(G, pos, colors, label_offset=0.25):
         nx.draw_networkx_edges(G, pos, arrows=True, arrowsize=10, width=1)
-        nx.draw_networkx_nodes(G, pos,
-                               node_color=[colors[n] for n in G.nodes()],
-                               node_size=node_size, edgecolors='black')
-        nx.draw_networkx_labels(G, pos, font_color='white', font_size=8)
+        nx.draw_networkx_nodes(
+            G,
+            pos,
+            node_color=[colors[n] for n in G.nodes()],
+            node_size=node_size,
+            edgecolors="black",
+        )
+        nx.draw_networkx_labels(G, pos, font_color="white", font_size=8)
 
         # Add rule names if available
         if rule_id_to_name:
             for n, (x, y) in pos.items():
                 if n in rule_id_to_name:
-                    plt.text(x + label_offset, y, rule_id_to_name[n],
-                             fontsize=7, color='black', va='center')
+                    plt.text(
+                        x + label_offset,
+                        y,
+                        rule_id_to_name[n],
+                        fontsize=7,
+                        color="black",
+                        va="center",
+                    )
 
     draw_graph(G1, pos1, colors1)
     draw_graph(G2, pos2, colors2)
 
-    plt.axis('off')
+    plt.axis("off")
     if scenario_name and scenario_name2:
-        plt.suptitle(f"Left: {scenario_name}    |    Right: {scenario_name2}", y=1.02, fontsize=14)
+        plt.suptitle(
+            f"Left: {scenario_name}    |    Right: {scenario_name2}",
+            y=1.02,
+            fontsize=14,
+        )
     elif scenario_name:
         plt.suptitle(f"{scenario_name}", y=1.02, fontsize=14)
     elif scenario_name2:

@@ -1,43 +1,68 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
-import scenic
 import random
+
+import matplotlib.pyplot as plt
+import scenic
+from matplotlib.animation import FFMpegWriter, FuncAnimation
+from matplotlib.patches import Polygon
 from scenic.simulators.metadrive import MetaDriveSimulator
 from scenic.simulators.newtonian import NewtonianSimulator
-import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
-from matplotlib.animation import FuncAnimation, FFMpegWriter
 from shapely.geometry import Polygon as ShapelyPolygon
 
 MAX_STEPS = 100
 
+
 def run_metadrive_scenario(file_path, max_steps=100, seed=None, maxIterations=10):
     if seed is not None:
         random.seed(seed)
-    scenic.setDebuggingOptions(verbosity=1, fullBacktrace=True, debugExceptions=False, debugRejections=False)
-    scenario = scenic.scenarioFromFile(file_path, model="scenic.simulators.metadrive.model", mode2D=True)
+    scenic.setDebuggingOptions(
+        verbosity=1, fullBacktrace=True, debugExceptions=False, debugRejections=False
+    )
+    scenario = scenic.scenarioFromFile(
+        file_path, model="scenic.simulators.metadrive.model", mode2D=True
+    )
     scene, _ = scenario.generate()
-    simulator = MetaDriveSimulator(sumo_map='../maps/Town05.net.xml')
-    simulation = simulator.simulate(scene, maxSteps=max_steps, maxIterations=maxIterations)
+    simulator = MetaDriveSimulator(sumo_map="../maps/Town05.net.xml")
+    simulation = simulator.simulate(
+        scene, maxSteps=max_steps, maxIterations=maxIterations
+    )
     if not simulation:
         raise RuntimeError("Simulation failed.")
     return simulation
+
 
 def run_newtonian_scenario(file_path, max_steps=100, seed=None, maxIterations=10):
     if seed is not None:
         random.seed(seed)
-    scenic.setDebuggingOptions(verbosity=1, fullBacktrace=True, debugExceptions=False, debugRejections=False)
-    scenario = scenic.scenarioFromFile(file_path, model="scenic.simulators.newtonian.driving_model", mode2D=True)
+    scenic.setDebuggingOptions(
+        verbosity=1, fullBacktrace=True, debugExceptions=False, debugRejections=False
+    )
+    scenario = scenic.scenarioFromFile(
+        file_path, model="scenic.simulators.newtonian.driving_model", mode2D=True
+    )
     scene, _ = scenario.generate()
     simulator = NewtonianSimulator()
-    simulation = simulator.simulate(scene, maxSteps=max_steps, maxIterations=maxIterations)
+    simulation = simulator.simulate(
+        scene, maxSteps=max_steps, maxIterations=maxIterations
+    )
     if not simulation:
         raise RuntimeError("Simulation failed.")
     return simulation
 
-def visualize_simulation(simulation, ids, violated_rules=[], save_path='trajectory.mp4', fps=10, trail_length=15, truncate=0):
+
+def visualize_simulation(
+    simulation,
+    ids,
+    violated_rules=[],
+    save_path="trajectory.mp4",
+    fps=10,
+    trail_length=15,
+    truncate=0,
+):
     trajectories = {}
     for id in ids:
         if id not in simulation.records:
@@ -45,51 +70,79 @@ def visualize_simulation(simulation, ids, violated_rules=[], save_path='trajecto
             return
         trajectories[id] = simulation.records[id]
         trajectories[id] = trajectories[id][truncate:]
-        
+
     # Number of frames = max length across vehicles
     num_frames = max(len(traj) for traj in trajectories.values())
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_aspect('equal', 'box')
-    
+    ax.set_aspect("equal", "box")
+
     # Print violated rules on the plot
     rules_text = "\n".join(violated_rules)
-    rules_display = ax.text(1.1, 1.1, rules_text, 
-                             fontsize=12, color='red',# weight='bold',
-                             ha='right', va='top', transform=ax.transAxes,
-                             bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'),
-                             animated=True)
+    rules_display = ax.text(
+        1.1,
+        1.1,
+        rules_text,
+        fontsize=12,
+        color="red",  # weight='bold',
+        ha="right",
+        va="top",
+        transform=ax.transAxes,
+        bbox=dict(facecolor="white", alpha=0.7, edgecolor="none"),
+        animated=True,
+    )
 
     # Create polygon patches and text labels for each vehicle
     vehicle_patches = {}
     vehicle_labels = {}
     for i, vid in enumerate(trajectories):
         poly = trajectories[vid][0][1]
-        
-        if 'Lane' in str(vid):  # Lane polygon
-            facecolor = plt.cm.Pastel1(i % 9)   # softer colormap
-            alpha = 0.2                         # more transparent
+
+        if "Lane" in str(vid):  # Lane polygon
+            facecolor = plt.cm.Pastel1(i % 9)  # softer colormap
+            alpha = 0.2  # more transparent
         else:  # Vehicle polygon
-            facecolor = plt.cm.tab10(i % 10)    # bold colormap
+            facecolor = plt.cm.tab10(i % 10)  # bold colormap
             alpha = 0.5
-            
-        patch = Polygon(list(poly.exterior.coords), closed=True, 
-                        facecolor=facecolor, alpha=alpha, edgecolor='black')
+
+        patch = Polygon(
+            list(poly.exterior.coords),
+            closed=True,
+            facecolor=facecolor,
+            alpha=alpha,
+            edgecolor="black",
+        )
         ax.add_patch(patch)
         vehicle_patches[vid] = patch
 
-        if 'Lane' not in str(vid):
-            label = ax.text(poly.centroid.x, poly.centroid.y, str(vid).split("Poly")[0], 
-                            fontsize=10, ha="center", va="center", color="black", weight="bold")
+        if "Lane" not in str(vid):
+            label = ax.text(
+                poly.centroid.x,
+                poly.centroid.y,
+                str(vid).split("Poly")[0],
+                fontsize=10,
+                ha="center",
+                va="center",
+                color="black",
+                weight="bold",
+            )
             vehicle_labels[vid] = label
         else:
-            vehicle_labels[vid] = ax.text(poly.centroid.x, poly.centroid.y, '', 
-                                          fontsize=10, ha="center", va="center", color="black", weight="bold")
+            vehicle_labels[vid] = ax.text(
+                poly.centroid.x,
+                poly.centroid.y,
+                "",
+                fontsize=10,
+                ha="center",
+                va="center",
+                color="black",
+                weight="bold",
+            )
 
     # Determine global plot limits
     all_x, all_y = [], []
     for vid, traj in trajectories.items():
-        if 'Lane' in str(vid):  # Lane polygon
+        if "Lane" in str(vid):  # Lane polygon
             continue
         for poly in traj:
             poly = poly[1]
@@ -105,7 +158,7 @@ def visualize_simulation(simulation, ids, violated_rules=[], save_path='trajecto
     def update(frame):
         artists = []
         artists.append(rules_display)
-        
+
         for i, (vid, traj) in enumerate(trajectories.items()):
             if frame < len(traj):
                 poly: ShapelyPolygon = traj[frame][1]
@@ -119,11 +172,16 @@ def visualize_simulation(simulation, ids, violated_rules=[], save_path='trajecto
                 artists.append(vehicle_labels[vid])
 
                 # Add trail segment (centroid path)
-                if frame > 0 and 'Lane' not in str(vid):  # Skip lane markings
-                    prev = traj[frame-1][1].centroid
+                if frame > 0 and "Lane" not in str(vid):  # Skip lane markings
+                    prev = traj[frame - 1][1].centroid
                     curr = centroid
-                    line, = ax.plot([prev.x, curr.x], [prev.y, curr.y],
-                                    color=plt.cm.tab10(i % 10), alpha=0.6, linewidth=2)
+                    (line,) = ax.plot(
+                        [prev.x, curr.x],
+                        [prev.y, curr.y],
+                        color=plt.cm.tab10(i % 10),
+                        alpha=0.6,
+                        linewidth=2,
+                    )
                     vehicle_trails[vid].append(line)
 
                     # Keep only the last `trail_length` segments
@@ -133,12 +191,14 @@ def visualize_simulation(simulation, ids, violated_rules=[], save_path='trajecto
 
                     # Update fading alpha
                     for j, l in enumerate(vehicle_trails[vid]):
-                        l.set_alpha((j+1) / trail_length)
+                        l.set_alpha((j + 1) / trail_length)
 
                     artists.extend(vehicle_trails[vid])
         return artists
 
-    ani = FuncAnimation(fig, update, frames=num_frames, blit=True, interval=1000/fps, repeat=False)
+    ani = FuncAnimation(
+        fig, update, frames=num_frames, blit=True, interval=1000 / fps, repeat=False
+    )
 
     # Save as mp4 using ffmpeg
     writer = FFMpegWriter(fps=fps, codec="libx264", bitrate=-1)
@@ -146,7 +206,10 @@ def visualize_simulation(simulation, ids, violated_rules=[], save_path='trajecto
     plt.close(fig)
     print(f"Video saved to {save_path}")
 
-def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, trail_length=15):
+
+def visualize_simulation_points(
+    simulation, save_path="trajectory.mp4", fps=10, trail_length=15
+):
     trajectories = simulation.trajectory  # [(pos1, pos2, ...), (pos1, pos2, ...), ...]
     # Truncate initial frames where positions are not float type (for NewtonianSimulator)
     start_idx = 0
@@ -164,7 +227,7 @@ def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, 
             all_x.append(pos.x)
             all_y.append(pos.y)
     fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_aspect('equal', 'box')
+    ax.set_aspect("equal", "box")
     ax.set_xlim(min(all_x) - 5, max(all_x) + 5)
     ax.set_ylim(min(all_y) - 5, max(all_y) + 5)
 
@@ -182,7 +245,7 @@ def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, 
         for i in range(num_objects):
             if i not in scatters:
                 color = colors[i % len(colors)]
-                scatters[i] = ax.plot([], [], 'o', color=color, markersize=6)[0]
+                scatters[i] = ax.plot([], [], "o", color=color, markersize=6)[0]
                 trails[i] = []
 
             pos = positions[i]
@@ -193,8 +256,13 @@ def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, 
             # Add trail
             if frame_idx > 0 and i < len(trajectories[frame_idx - 1]):
                 prev = trajectories[frame_idx - 1][i]
-                line, = ax.plot([prev.x, x], [prev.y, y],
-                                color=colors[i % len(colors)], alpha=0.6, linewidth=2)
+                (line,) = ax.plot(
+                    [prev.x, x],
+                    [prev.y, y],
+                    color=colors[i % len(colors)],
+                    alpha=0.6,
+                    linewidth=2,
+                )
                 trails[i].append(line)
 
                 # Keep only the last `trail_length` segments
@@ -220,22 +288,29 @@ def visualize_simulation_points(simulation, save_path='trajectory.mp4', fps=10, 
 
         return artists
 
-    ani = FuncAnimation(fig, update, frames=num_frames, blit=True, interval=1000 / fps, repeat=False)
+    ani = FuncAnimation(
+        fig, update, frames=num_frames, blit=True, interval=1000 / fps, repeat=False
+    )
 
     writer = FFMpegWriter(fps=fps, codec="libx264", bitrate=-1)
     ani.save(save_path, writer=writer)
     plt.close(fig)
     print(f"Video saved to {save_path}")
-    
+
+
 if __name__ == "__main__":
     scenario_to_ids = {
-        "nhtsa_intersection01": ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly'],
-        "crash_cruise_032721-pdf": ['egoPoly', 'advPoly', 'egoLanePoly', 'advLanePoly'],
+        "nhtsa_intersection01": ["egoPoly", "advPoly", "egoLanePoly", "advLanePoly"],
+        "crash_cruise_032721-pdf": ["egoPoly", "advPoly", "egoLanePoly", "advLanePoly"],
     }
     scenario = "crash_cruise_032721-pdf"
-    simulation = run_metadrive_scenario(f"{scenario.split('_')[0]}_gemini/{scenario}_gemini.scenic", max_steps=MAX_STEPS, seed=123)
-    #simulation = run_newtonian_scenario(f"{scenario}/{scenario}.scenic", max_steps=MAX_STEPS, seed=123)
+    simulation = run_metadrive_scenario(
+        f"{scenario.split('_')[0]}_gemini/{scenario}_gemini.scenic",
+        max_steps=MAX_STEPS,
+        seed=123,
+    )
+    # simulation = run_newtonian_scenario(f"{scenario}/{scenario}.scenic", max_steps=MAX_STEPS, seed=123)
     ids = scenario_to_ids[scenario]
-    
+
     visualize_simulation(simulation, ids, truncate=0)
-    #visualize_simulation_points(simulation)
+    # visualize_simulation_points(simulation)

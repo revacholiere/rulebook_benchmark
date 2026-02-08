@@ -1,8 +1,11 @@
 """
 The template classes for interfacing driving agents with Scenic.
 """
+
 from abc import abstractmethod
+
 from scenic.core.simulators import Action
+
 
 class Agent:
     def __init__(self):
@@ -14,7 +17,8 @@ class Agent:
         Return the next control action for the agent.
         """
         raise NotImplementedError("run_step must be implemented by the subclass.")
-    
+
+
 class AgentAction(Action):
     def applyTo(self, agent, *args, **kwargs):
         """

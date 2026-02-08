@@ -6,11 +6,11 @@ def parse_log_file(log_path):
         "errors": "",
         "rule_counts": "",
         "unique_violations": "",
-        "failed": False
+        "failed": False,
     }
     failed_scenarios = []
 
-    with open(log_path, 'r') as f:
+    with open(log_path, "r") as f:
         lines = f.readlines()
 
     for i, line in enumerate(lines):
@@ -35,7 +35,9 @@ def parse_log_file(log_path):
             ce_ratio = line.split("Counterexample ratio:")[-1].split(",")[0].strip()
             max_error = line.split("Max error value:")[-1].split(",")[0].strip()
             max_norm = line.split("Max normalized error value:")[-1].strip()
-            current_data["errors"] = f"{avg_norm} {max_norm} {ce_ratio} {avg_error} {max_error}"
+            current_data["errors"] = (
+                f"{avg_norm} {max_norm} {ce_ratio} {avg_error} {max_error}"
+            )
 
         # Extract rule violation count
         elif "Rule violation count:" in line:
@@ -60,22 +62,38 @@ def parse_log_file(log_path):
             uv_part = uv_part.strip("[]")
             groups = uv_part.split("], [")
             for g in groups:
-                g = g.replace("[", "").replace("]", "").replace("'", "").replace('"', "").strip()
+                g = (
+                    g.replace("[", "")
+                    .replace("]", "")
+                    .replace("'", "")
+                    .replace('"', "")
+                    .strip()
+                )
                 if g:
                     items = tuple(sorted(x.strip() for x in g.split(",") if x.strip()))
                     unique_violations_global.add(items)
 
         # Detect post-failure
         elif "❌ Scenario" in line and "exited with error code" in line:
-            scenario_idx = line.split()[2].split('.scenic')[0].split('/')[-1]
+            scenario_idx = line.split()[2].split(".scenic")[0].split("/")[-1]
             current_data["failed"] = True
             results[scenario_idx] = current_data
-            current_data = {"errors": "", "rule_counts": "", "unique_violations": "", "failed": False}
-            
+            current_data = {
+                "errors": "",
+                "rule_counts": "",
+                "unique_violations": "",
+                "failed": False,
+            }
+
         elif "✅ Scenario" in line and "completed successfully" in line:
-            scenario_idx = line.split()[2].split('.scenic')[0].split('/')[-1]
+            scenario_idx = line.split()[2].split(".scenic")[0].split("/")[-1]
             results[scenario_idx] = current_data
-            current_data = {"errors": "", "rule_counts": "", "unique_violations": "", "failed": False}
+            current_data = {
+                "errors": "",
+                "rule_counts": "",
+                "unique_violations": "",
+                "failed": False,
+            }
 
     # Print results
     results = sorted(results.items())
@@ -84,13 +102,19 @@ def parse_log_file(log_path):
             print(f"{scenario}")
             failed_scenarios.append(scenario)
         else:
-            print(f"{scenario} {data['errors']} {data['unique_violations']} {data['rule_counts']}")
-    print(f"\nTotal failed scenarios: {len(failed_scenarios)}, Failed indices: {failed_scenarios}")
+            print(
+                f"{scenario} {data['errors']} {data['unique_violations']} {data['rule_counts']}"
+            )
+    print(
+        f"\nTotal failed scenarios: {len(failed_scenarios)}, Failed indices: {failed_scenarios}"
+    )
 
     # Global unique violation count
-    print(f"\nTotal unique violations across all scenarios: {len(unique_violations_global)}")
-    
+    print(
+        f"\nTotal unique violations across all scenarios: {len(unique_violations_global)}"
+    )
+
+
 if __name__ == "__main__":
     log_file_path = "./outputs/collision_with_vru_ppo_eval.log"
     parse_log_file(log_file_path)
-    

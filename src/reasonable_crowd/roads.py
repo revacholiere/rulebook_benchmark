@@ -1,31 +1,34 @@
-# This file includes the some of the classes in Scenic's roads.py, but they are simplified to keep only the necessary properties for the benchmark. 
-from rulebook_benchmark.utils import angle_between, normalize_vector
-
-from scenic.domains.driving.roads import _toVector
-from scenic.core.vectors import Vector
-import shapely
-from typing import FrozenSet, List, Optional, Sequence, Tuple, Union
+# This file includes the some of the classes in Scenic's roads.py, but they are simplified to keep only the necessary properties for the benchmark.
 import numbers
-from scenic.core.object_types import Point
-from cached_property import cached_property
+from typing import Tuple, Union
+
 import numpy as np
+import shapely
+from cached_property import cached_property
+from scenic.core.object_types import Point
+from scenic.core.vectors import Vector
+from scenic.domains.driving.roads import _toVector
+
+from rulebook_benchmark.utils import angle_between, normalize_vector
 
 Vectorlike = Union[Vector, Point, Tuple[numbers.Real, numbers.Real]]
 
-class MultiLinePlaceholder: # placeholder class for getting the linestring from attributes such as centerline, leftEdge etc
+
+class MultiLinePlaceholder:  # placeholder class for getting the linestring from attributes such as centerline, leftEdge etc
     def __init__(self, linestring):
         self.lineString = linestring
-        
+
+
 class Maneuver:
     def __init__(self, startLane, endLane, connectingLane=None):
         self.startLane = startLane
         self.endLane = endLane
         self.connectingLane = connectingLane
 
+
 class OrientationVectorPlaceholder:
     def __init__(self, angle):
         self.yaw = angle  # assuming angle is in radians
-        
 
 
 class ElementOrientation:
@@ -36,14 +39,20 @@ class ElementOrientation:
         if isinstance(self.element, Lane):
             return self._get_centerline_orientation(point)
         elif isinstance(self.element, NetworkElement):
-            lane = self.element.network.findPointIn(point, self.element.network.lanes, reject=False)
+            lane = self.element.network.findPointIn(
+                point, self.element.network.lanes, reject=False
+            )
             if lane:
                 return lane.orientation.value(point)
             else:
-                raise Exception(f"Error: Point {point} not found in any lane of the network, even though it lies on a NetworkElement.")
+                raise Exception(
+                    f"Error: Point {point} not found in any lane of the network, even though it lies on a NetworkElement."
+                )
         else:
-            raise NotImplementedError("Orientation not implemented for this element type")
-        
+            raise NotImplementedError(
+                "Orientation not implemented for this element type"
+            )
+
     def _get_centerline_orientation(self, point, epsilon=1e-6):
         centerline = self.element.centerline.lineString
         point = shapely.Point(point)
@@ -51,42 +60,54 @@ class ElementOrientation:
         if projection <= epsilon:
             previous_point = centerline.interpolate(0, normalized=True)
         else:
-            previous_point = centerline.interpolate(projection - epsilon, normalized=True)
-            
+            previous_point = centerline.interpolate(
+                projection - epsilon, normalized=True
+            )
+
         if projection >= 1 - epsilon:
             next_point = centerline.interpolate(1, normalized=True)
         else:
             next_point = centerline.interpolate(projection + epsilon, normalized=True)
-        direction = np.array([next_point.x, next_point.y]) - np.array([previous_point.x, previous_point.y])
-        #direction = Vector(next_point.x, next_point.y) - Vector(previous_point.x, previous_point.y)
+        direction = np.array([next_point.x, next_point.y]) - np.array(
+            [previous_point.x, previous_point.y]
+        )
+        # direction = Vector(next_point.x, next_point.y) - Vector(previous_point.x, previous_point.y)
         zero_radian = np.array([1, 0])  # assuming right is 0 radians
         direction = direction / np.linalg.norm(direction)  # normalize direction
         angle = angle_between(zero_radian, direction)
         return angle
-        
-        
+
 
 class NetworkElement:
     def __init__(self, polygon, name, network=None, speed_limit=None):
         self.polygon = polygon
-        self.name = name # will also act as unique id
+        self.name = name  # will also act as unique id
         self.uid = name
         self.id = name  # for compatibility with Scenic
         self.network = network
         self.speedLimit = speed_limit
-        
+
     @cached_property
     def orientation(self):
         return ElementOrientation(self)
-    
 
     def __eq__(self, other):
         if not isinstance(other, NetworkElement):
             return NotImplemented
         return self.network is other.network and self.uid == other.uid
 
+
 class LinearElement(NetworkElement):
-    def __init__(self, polygon, name, centerline, leftEdge, rightEdge, network=None, speed_limit=None):
+    def __init__(
+        self,
+        polygon,
+        name,
+        centerline,
+        leftEdge,
+        rightEdge,
+        network=None,
+        speed_limit=None,
+    ):
         super().__init__(polygon, name, network, speed_limit)
         self.centerline = MultiLinePlaceholder(centerline)
         self.leftEdge = MultiLinePlaceholder(leftEdge)
@@ -97,16 +118,26 @@ class Road(NetworkElement):
     def __init__(self, polygon, name, network=None, speed_limit=None):
         super().__init__(polygon, name, network, speed_limit)
         self.laneGroups = None
-        self.lanes = None        
-        
+        self.lanes = None
+
     def laneGroupAt(self, point, reject=False):
         return self.network.findPointIn(point, self.laneGroups, reject)
 
 
-
 class Lane(LinearElement):
-    def __init__(self, polygon, name, centerline, leftEdge, rightEdge, network=None, speed_limit=None):
-        super().__init__(polygon, name, centerline, leftEdge, rightEdge, network, speed_limit)
+    def __init__(
+        self,
+        polygon,
+        name,
+        centerline,
+        leftEdge,
+        rightEdge,
+        network=None,
+        speed_limit=None,
+    ):
+        super().__init__(
+            polygon, name, centerline, leftEdge, rightEdge, network, speed_limit
+        )
         self.maneuvers = None
         self.predecessor = None
         self.successor = None
@@ -120,8 +151,18 @@ class LaneGroup(NetworkElement):
         self.lanes = None
         self.road = None
 
+
 class Intersection(NetworkElement):
-    def __init__(self, polygon, name, network=None, speed_limit=None, incomingLanes=None, outgoingLanes=None, connectingLanes=None):
+    def __init__(
+        self,
+        polygon,
+        name,
+        network=None,
+        speed_limit=None,
+        incomingLanes=None,
+        outgoingLanes=None,
+        connectingLanes=None,
+    ):
         super().__init__(polygon, name, network, speed_limit)
         self.incomingLanes = incomingLanes
         self.outgoingLanes = outgoingLanes
@@ -135,6 +176,7 @@ class RegionPlaceholder:
         self.lanes = lanes
         self.intersections = intersections
         self.__attrs_post_init__()
+
     def __attrs_post_init__(self):
         polygon = shapely.Polygon()  # Placeholder for the actual polygon
         for road in self.roads:
@@ -145,12 +187,12 @@ class RegionPlaceholder:
             polygon = polygon.union(intersection.polygon)
         self.polygons = polygon
         self.polygon = polygon
-        
-        
 
 
-class Network():
-    def __init__(self, elements, roads, connectingRoads, lanes, laneGroups, intersections):
+class Network:
+    def __init__(
+        self, elements, roads, connectingRoads, lanes, laneGroups, intersections
+    ):
         self.elements = elements
         self.roads = roads
         self.connectingRoads = connectingRoads
@@ -160,14 +202,16 @@ class Network():
         self.tolerance = 0
         self.allRoads = roads + connectingRoads
         self.__attrs_post_init__()
-        
+
     def __attrs_post_init__(self):
         for elem in self.elements.values():
             elem.network = self
-        self.drivableRegion = RegionPlaceholder(self.roads, self.lanes, self.intersections)
+        self.drivableRegion = RegionPlaceholder(
+            self.roads, self.lanes, self.intersections
+        )
         self._uidForIndex = tuple(self.elements)
         self._rtree = shapely.STRtree([elem.polygon for elem in self.elements.values()])
-        
+
     def findPointIn(self, point, elems, reject):
         point = shapely.geometry.Point(_toVector(point))
 
@@ -197,7 +241,7 @@ class Network():
                 message = "requested element does not exist"
             raise Exception(message)
         return None
-    
+
     def elementAt(self, point: Vectorlike, reject=False) -> Union[NetworkElement, None]:
         """Get the highest-level `NetworkElement` at a given point, if any.
 
@@ -210,11 +254,11 @@ class Network():
         if intersection is not None:
             return intersection
         return self.roadAt(point, reject=reject)
- 
+
     def roadAt(self, point: Vectorlike, reject=False) -> Union[Road, None]:
         """Get the `Road` passing through a given point."""
         return self.findPointIn(point, self.allRoads, reject)
-    
+
     def laneAt(self, point: Vectorlike, reject=False) -> Union[Lane, None]:
         """Get the `Lane` passing through a given point."""
         return self.findPointIn(point, self.lanes, reject)
@@ -224,12 +268,9 @@ class Network():
         point = _toVector(point)
         road = self.roadAt(point, reject=reject)
         return None if road is None else road.laneGroupAt(point, reject=reject)
-    
+
     def intersectionAt(
         self, point: Vectorlike, reject=False
     ) -> Union[Intersection, None]:
         """Get the `Intersection` at a given point."""
         return self.findPointIn(point, self.intersections, reject)
-    
-    
-    

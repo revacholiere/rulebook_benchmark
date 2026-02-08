@@ -1,9 +1,10 @@
-import shapely
-import numpy as np
-from shapely.strtree import STRtree
-from rulebook_benchmark.utils import angle_between, normalize_angle
 import math
-    
+
+import numpy as np
+import shapely
+from shapely.strtree import STRtree
+
+from rulebook_benchmark.utils import normalize_angle
 
 
 def isObjectInLane(state, lane):  # check if the object's center is in the lane
@@ -12,7 +13,9 @@ def isObjectInLane(state, lane):  # check if the object's center is in the lane
     return lane_polygon.contains(object_point)
 
 
-def firstPass(obj, str_tree, lanes, isScenic=False):  # process the states where the lane is not ambiguous
+def firstPass(
+    obj, str_tree, lanes, isScenic=False
+):  # process the states where the lane is not ambiguous
     possible_lanes = {}
     ambiguous_lanes = {}
     for i in range(len(obj.trajectory)):
@@ -21,11 +24,11 @@ def firstPass(obj, str_tree, lanes, isScenic=False):  # process the states where
         polygon = state.polygon
         possible_lanes[i] = get_possible_lanes(point, str_tree, lanes)
         polygon_intersected_lanes = get_possible_lanes(polygon, str_tree, lanes)
-        correct, incorrect = correct_incorrect_lanes(state, polygon_intersected_lanes, isScenic=isScenic)
+        correct, incorrect = correct_incorrect_lanes(
+            state, polygon_intersected_lanes, isScenic=isScenic
+        )
         state.correct_lanes = correct
         state.incorrect_lanes = incorrect
-        
-        
 
         if len(possible_lanes[i]) == 1:
             obj.trajectory[i].lane = possible_lanes[i][0]
@@ -34,15 +37,15 @@ def firstPass(obj, str_tree, lanes, isScenic=False):  # process the states where
         else:  # needs second pass
             ambiguous_lanes[i] = possible_lanes[i]
 
-    #print(len(ambiguous_lanes), "states with ambiguous lanes")
+    # print(len(ambiguous_lanes), "states with ambiguous lanes")
     return ambiguous_lanes
 
 
 def get_closest_orientation_lane(state, lanes, isScenic=False):
     rot = 0
     if isScenic:
-        rot = np.pi/2
-    
+        rot = np.pi / 2
+
     orientation = state.orientation.yaw
     pos = state.position
     similarities = []
@@ -75,8 +78,8 @@ def correct_incorrect_lanes(state, lanes, isScenic=False):
     ego_orientation = state.orientation.yaw
     rot = 0
     if isScenic:
-        rot = np.pi/2
-        
+        rot = np.pi / 2
+
     corrects = []
     incorrects = []
     for lane in lanes:
@@ -89,13 +92,9 @@ def correct_incorrect_lanes(state, lanes, isScenic=False):
     return corrects, incorrects
 
 
-
-
-
-
 def secondPass(obj, ambiguous_lanes, network, isScenic=False):
     if isScenic:
-        rot = np.pi/2
+        rot = np.pi / 2
     else:
         rot = 0
     for step, lanes in ambiguous_lanes.items():
@@ -111,20 +110,26 @@ def secondPass(obj, ambiguous_lanes, network, isScenic=False):
                     if prev_lane == lane:
                         obj.trajectory[step].lane = lane
                         found = True
-                        #print("found same lane as previous", step)
+                        # print("found same lane as previous", step)
                         break
                 if found:
                     continue
 
             j = step + 1
-            while j < len(obj.trajectory) and obj.trajectory[j].lane not in intersection.outgoingLanes:
+            while (
+                j < len(obj.trajectory)
+                and obj.trajectory[j].lane not in intersection.outgoingLanes
+            ):
                 j += 1
 
             candidate_lanes = []
             future_lane = None
-            if j < len(obj.trajectory): future_lane = obj.get_state(j).lane
+            if j < len(obj.trajectory):
+                future_lane = obj.get_state(j).lane
 
-            if future_lane is not None:  # non-ambiguous lane or lane group found in the future
+            if (
+                future_lane is not None
+            ):  # non-ambiguous lane or lane group found in the future
                 future_lane = obj.get_state(j).lane
                 for lane in lanes:
                     end_lane = lane.successor
@@ -148,9 +153,12 @@ def secondPass(obj, ambiguous_lanes, network, isScenic=False):
 
             candidate_lanes_2 = []
             prev_lane = None
-            if k >= 0: prev_lane = obj.get_state(k).lane
+            if k >= 0:
+                prev_lane = obj.get_state(k).lane
 
-            if prev_lane is not None and future_lane is not None:  # non-ambiguous lane or lane group found in the future and past
+            if (
+                prev_lane is not None and future_lane is not None
+            ):  # non-ambiguous lane or lane group found in the future and past
                 for lane in candidate_lanes:
                     end_lane = lane.successor
                     start_lane = lane.predecessor
@@ -168,53 +176,57 @@ def secondPass(obj, ambiguous_lanes, network, isScenic=False):
                     continue
                 else:
                     pass
-                    #for lane in candidate_lanes_2:
+                    # for lane in candidate_lanes_2:
                     #    print(lane.id)
 
             angles = []
 
             last_resort = lanes
-            
+
             obj_orientation = obj.get_state(step).orientation.yaw
             obj_orientation = obj_orientation % (2 * np.pi)
             for lane in last_resort:  # workaround for when no candidate lanes are found
-                lane_orientation = lane.orientation.value(obj.get_state(step).position) + rot
-                lane_orientation = lane_orientation % (2 * np.pi)
-                angles.append(
-                    abs(normalize_angle(lane_orientation - obj_orientation))
+                lane_orientation = (
+                    lane.orientation.value(obj.get_state(step).position) + rot
                 )
+                lane_orientation = lane_orientation % (2 * np.pi)
+                angles.append(abs(normalize_angle(lane_orientation - obj_orientation)))
             min_idx = angles.index(min(angles))
             obj.trajectory[step].lane = lanes[min_idx]
-            #print(obj.object_id, "found lane with closest orientation", step)
-                
-            
+            # print(obj.object_id, "found lane with closest orientation", step)
+
         else:
-            #print("this should not happen: secondPass no intersection found", step)
+            # print("this should not happen: secondPass no intersection found", step)
             prev_lane = obj.get_state(step - 1).lane if step > 0 else None
             if prev_lane is not None:
                 for lane in lanes:
-                    if prev_lane == lane or lane in [maneuver.endLane for maneuver in prev_lane.maneuvers]:
+                    if prev_lane == lane or lane in [
+                        maneuver.endLane for maneuver in prev_lane.maneuvers
+                    ]:
                         obj.trajectory[step].lane = lane
                         found = True
-                        #print("found same lane as previous", step)
+                        # print("found same lane as previous", step)
                         break
             else:
                 angles = []
                 for lane in lanes:
-                    lane_orientation = lane.orientation.value(obj.get_state(step).position) % (2 * np.pi) + rot
+                    lane_orientation = (
+                        lane.orientation.value(obj.get_state(step).position)
+                        % (2 * np.pi)
+                        + rot
+                    )
                     obj_orientation = obj.get_state(step).orientation.yaw % (2 * np.pi)
                     # ensure both angles are in the range [0, 2*pi)
                     lane_orientation = lane_orientation % (2 * np.pi)
                     obj_orientation = obj_orientation % (2 * np.pi)
-                    
-                    
+
                     angles.append(
                         abs(normalize_angle(lane_orientation - obj_orientation))
                     )
                 min_idx = angles.index(min(angles))
                 obj.trajectory[step].lane = lanes[min_idx]
-                    
-            #print("found lane with closest orientation", step)
+
+            # print("found lane with closest orientation", step)
 
 
 def process_trajectory(
@@ -236,7 +248,6 @@ def process_trajectory(
         # print(f"Object {obj.object_type} {obj.mesh} has trajectory: {[state.lane for state in obj.trajectory]}")
 
 
-
 def get_possible_lanes(shapely_obj, tree, lanes):
     indices = tree.query(shapely_obj, predicate="intersects")
     return [lanes[ind] for ind in indices]
@@ -249,14 +260,5 @@ def process_trajectory_old(realization):
         for i in range(len(obj.trajectory)):
             state = obj.get_state(i)
             state.lane = network.laneAt(state.position)
-            #if state.lane is None:
+            # if state.lane is None:
             #    print(f"Object {obj.object_type} {obj.mesh} is out of road at step {i}")
-            
-            
-            
-            
-            
-            
-            
-            
-
