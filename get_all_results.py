@@ -3,7 +3,7 @@ import pickle
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold, train_test_split
+from sklearn.model_selection import KFold
 
 from reasonable_crowd.dataset import (build_evaluation_dataset,
                                       get_trajectories, load_annotations)
@@ -11,18 +11,12 @@ from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
 from reasonable_crowd.InPlaceRulebook import InPlaceRulebook
 from reasonable_crowd.optimization import (
     brute_force_group_optimization, cache_rule_evaluations,
-    find_scenario_groups, find_scenario_rulebooks, greedy_group_optimization,
-    group_rulebook, number_of_unique_rulebooks,
-    optimize_rulebook_greedy_by_priority,
-    optimize_rulebook_grid_bruteforce_with_validation, simulated_annealing,
-    simulated_annealing_with_validation)
+    find_scenario_groups, greedy_group_optimization, group_rulebook,
+    optimize_rulebook_greedy_by_priority)
 from reasonable_crowd.parse_map import parse_map
-from reasonable_crowd.rulebook_visualization import (
-    plot_topological_graph, plot_two_rulebooks_side_by_side)
-from rulebook_benchmark.realization import VariableHandler
-from rulebook_benchmark.rule_functions import (Result, RuleEngine, f1, f2, f3,
-                                               f4, f5, f6, f7, f8, f9, f11,
-                                               f12, f13, f15, f17, f18)
+from rulebook_benchmark.rule_functions import (f1, f2, f3, f4, f5, f6, f7, f8,
+                                               f9, f11, f12, f13, f15, f17,
+                                               f18)
 from rulebook_benchmark.rulebook import Rulebook
 
 SEED = 50
