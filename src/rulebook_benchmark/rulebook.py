@@ -544,22 +544,6 @@ class Rule:
         return self.func(realization, start_index, end_index, **self.args)
 
 
-if __name__ == "__main__":
-    rb = Rulebook()
-    rb._parse_rules("test_functions.py")
-    rb._parse_rulebook_from_file("../../example/example_rulebook_0.graph")
-    from test_functions import test_func_1
-
-    rb.add_rule(7, "Test rule 7", test_func_1)
-    rb.add_rule_relation(7, 4, Relation.LARGER)
-    rb.print_adjacency_matrix()
-    rb.remove_rule(7)
-    rb.print_adjacency_matrix()
-    rb.visualize_rulebook(output_file_name="../../example/example_rulebook_0.png")
-
-    rb.compare_trajectories("a", "b")
-
-
 class Result:
     def __init__(self, minimum_violation=0, aggregation_method=max):
         self.total_violation = minimum_violation
@@ -701,3 +685,19 @@ class RuleEngine:
                     print(d)
                 pass
         return results
+
+
+if __name__ == "__main__":
+    rb = Rulebook()
+    rb._parse_rules("test_functions.py")
+    rb._parse_rulebook_from_file("../../example/example_rulebook_0.graph")
+    from test_functions import test_func_1
+
+    rb.add_rule(7, "Test rule 7", test_func_1)
+    rb.add_rule_relation(7, 4, Relation.LARGER)
+    rb.print_adjacency_matrix()
+    rb.remove_rule(7)
+    rb.print_adjacency_matrix()
+    rb.visualize_rulebook(output_file_name="../../example/example_rulebook_0.png")
+
+    rb.compare_trajectories("a", "b")
