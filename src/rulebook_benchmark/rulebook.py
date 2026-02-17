@@ -1,10 +1,10 @@
 import ast
 from collections import defaultdict
 from enum import Enum
-
 import matplotlib.pyplot as plt
 import networkx as nx
 
+from realization import VariableHandler
 
 class FunctionVisitor(ast.NodeVisitor):
     def __init__(self):
@@ -22,44 +22,19 @@ class Relation(Enum):
 
 
 class Rulebook:
-    def __init__(self, rule_file=None, rulebook_file=None):
+    def __init__(self, rule_id_to_rule: dict, rulebook_file=None):
         """
-        Initializes a rulebook from files.
+        Args:
+            rule_id_to_rule (dict): A dictionary mapping rule ids to Rule objects.
+            rulebook_file (string): Path to the rulebook file.
         """
         self.verbosity = 1
         self.priority_graph = nx.DiGraph()
-        self.in_place_priority_graph = nx.DiGraph()
         self.rule_ids = set()
-        self.rule_to_node_id = {}
-        self.functions = {}
-        self.name_to_id = {}
-        if rule_file:
-            self._parse_rules(rule_file)
+        self.rule_id_to_rule = rule_id_to_rule
+        self.rule_id_to_node_id = {} # mapping from rule id to node id in the priority graph
         if rulebook_file:
             self._parse_rulebook_from_file(rulebook_file)
-
-    def _parse_rules(self, rule_file):
-        """
-        Parses rule functions from a rule file.
-        """
-        with open(rule_file, "r") as file:
-            file_contents = file.read()
-
-        tree = ast.parse(file_contents)
-
-        function_visitor = FunctionVisitor()
-        function_visitor.visit(tree)
-
-        for function_node in function_visitor.functions:
-            function_name = function_node.name
-            function_code = compile(
-                ast.Module(body=[function_node], type_ignores=[]), "<string>", "exec"
-            )
-            exec(function_code)
-            self.functions[function_name] = locals()[function_name]
-
-        if self.verbosity >= 2:
-            print(f"Parsed functions: {self.functions}")
 
     def _parse_rulebook_from_file(self, rulebook_file):
         """
@@ -91,33 +66,18 @@ class Rulebook:
 
                 # Header
                 if header_section:
-                    # TODO: may need to store some header information
                     continue
 
                 # Node
                 if rule_section:
-                    rule_info = line.split('"')
-                    rule_id = int(rule_info[0].strip())
+                    rule_id = int(line.strip())
+                    rule = self.rule_id_to_rule[rule_id]
                     self.rule_ids.add(rule_id)
-                    self.rule_to_node_id[rule_id] = rule_id
-                    rule_name = rule_info[1]
-                    rule_func_name = rule_info[2].strip()
-                    self.name_to_id[rule_name] = rule_id
-                    if not self.functions:
-                        rule_func = None
-                    else:
-                        if rule_func_name not in self.functions:
-                            raise ValueError(
-                                f"Rule function {rule_func_name} not found in the rule file."
-                            )
-                        rule_func = self.functions[rule_func_name]
-                    rule = Rule(
-                        id=rule_id, func=rule_func, name=rule_name, description=""
-                    )
+                    self.rule_id_to_node_id[rule_id] = rule_id
                     self.priority_graph.add_node(rule_id, rules={rule_id: rule})
                     if self.verbosity >= 2:
                         print(
-                            f"Add rule {rule_id} with name: {rule_name}, rule function: {rule_func}"
+                            f"Add rule {rule_id} with name: {rule.name}, rule function: {rule.calculate_violation}"
                         )
 
                 # Same level rules
@@ -125,7 +85,7 @@ class Rulebook:
                     same_level_info = line.split(" ")
                     rep = int(same_level_info[0])
                     for i in range(1, len(same_level_info)):
-                        self.rule_to_node_id[int(same_level_info[i])] = rep
+                        self.rule_id_to_node_id[int(same_level_info[i])] = rep
                         self.priority_graph.nodes[rep]["rules"][
                             int(same_level_info[i])
                         ] = self.priority_graph.nodes[int(same_level_info[i])]["rules"][
@@ -140,8 +100,8 @@ class Rulebook:
                 # Edge
                 if edge_section:
                     edge_info = line.split(" ")
-                    src = self.rule_to_node_id[int(edge_info[0])]
-                    dst = self.rule_to_node_id[int(edge_info[1])]
+                    src = self.rule_id_to_node_id[int(edge_info[0])]
+                    dst = self.rule_id_to_node_id[int(edge_info[1])]
                     if src == dst:
                         continue
                     if self.priority_graph.has_edge(src, dst):
@@ -160,16 +120,17 @@ class Rulebook:
                 print(f"Nodes: {self.priority_graph.nodes(data=True)}")
                 print(f"Edges: {self.priority_graph.edges()}")
 
-    def add_rule(self, id, name, rule_function):
+    def add_rule(self, rule_object):
         """
         Adds an isolated rule to the rulebook.
         """
+        id = rule_object.id
         if id in self.rule_ids:
             raise ValueError(f"Node ID {id} already exists in the rulebook.")
         self.rule_ids.add(id)
-        self.rule_to_node_id[id] = id
-        rule = Rule(id=id, func=rule_function, name=name, description="")
-        self.priority_graph.add_node(id, rules={id: rule})
+        self.rule_id_to_node_id[id] = id
+        self.rule_id_to_rule[id] = rule_object
+        self.priority_graph.add_node(id, rules={id: rule_object})
 
     def add_rule_relation(self, rule_id_1, rule_id_2, relation=Relation.LARGER):
         """
@@ -179,8 +140,8 @@ class Rulebook:
             raise ValueError(
                 f"Rule IDs {rule_id_1} and {rule_id_2} must exist in the rulebook."
             )
-        resp_1 = self.rule_to_node_id[rule_id_1]
-        resp_2 = self.rule_to_node_id[rule_id_2]
+        resp_1 = self.rule_id_to_node_id[rule_id_1]
+        resp_2 = self.rule_id_to_node_id[rule_id_2]
         if resp_1 == resp_2:
             raise ValueError(
                 f"Node IDs {rule_id_1} and {rule_id_2} are already assigned to the same level."
@@ -192,7 +153,7 @@ class Rulebook:
         elif relation == Relation.EQUAL:
             for id, rule in self.priority_graph.nodes[resp_2]["rules"].items():
                 self.priority_graph.nodes[resp_1]["rules"][id] = rule
-                self.rule_to_node_id[id] = resp_1
+                self.rule_id_to_node_id[id] = resp_1
             preds = list(self.priority_graph.predecessors(resp_2))
             succs = list(self.priority_graph.successors(resp_2))
             self.priority_graph.remove_node(resp_2)
@@ -210,7 +171,7 @@ class Rulebook:
         """
         if rule_id not in self.rule_ids:
             raise ValueError(f"Rule ID {rule_id} not found in the priority graph.")
-        resp = self.rule_to_node_id[rule_id]
+        resp = self.rule_id_to_node_id[rule_id]
         if len(self.priority_graph.nodes[resp]["rules"]) == 1:
             preds = list(self.priority_graph.predecessors(resp))
             succs = list(self.priority_graph.successors(resp))
@@ -233,9 +194,9 @@ class Rulebook:
                     self.priority_graph.add_edge(new_resp, succ)
                 self.priority_graph.remove_node(resp)
                 for id in self.priority_graph.nodes[new_resp]["rules"]:
-                    self.rule_to_node_id[id] = new_resp
+                    self.rule_id_to_node_id[id] = new_resp
         self.rule_ids.remove(rule_id)
-        self.rule_to_node_id.pop(rule_id)
+        self.rule_id_to_node_id.pop(rule_id)
 
     def remove_rule_relation(self, rule_id_1, rule_id_2):
         """
@@ -245,8 +206,8 @@ class Rulebook:
             raise ValueError(
                 f"Rule IDs {rule_id_1} and {rule_id_2} must exist in the rulebook."
             )
-        resp_1 = self.rule_to_node_id[rule_id_1]
-        resp_2 = self.rule_to_node_id[rule_id_2]
+        resp_1 = self.rule_id_to_node_id[rule_id_1]
+        resp_2 = self.rule_id_to_node_id[rule_id_2]
         if self.priority_graph.has_edge(resp_1, resp_2):
             self.priority_graph.remove_edge(resp_1, resp_2)
         else:
@@ -270,8 +231,8 @@ class Rulebook:
             if to_print:
                 print("Rule IDs not found in the rulebook.")
             return
-        node_id_1 = self.rule_to_node_id[rule_id_1]
-        node_id_2 = self.rule_to_node_id[rule_id_2]
+        node_id_1 = self.rule_id_to_node_id[rule_id_1]
+        node_id_2 = self.rule_id_to_node_id[rule_id_2]
         if node_id_1 == node_id_2:
             if to_print:
                 print(f"Rule {rule_id_1} and Rule {rule_id_2} are equal.")
@@ -287,100 +248,6 @@ class Rulebook:
         if to_print:
             print(f"Rule {rule_id_1} and Rule {rule_id_2} are non-comparable.")
         return Relation.NONCOMPARABLE
-
-    def evaluate_trajectory_rule(self, rule_id, traj):
-        """
-        Evaluates a trajectory on a specific rule given its node ID.
-        """
-        if rule_id not in self.rule_ids:
-            raise ValueError(f"Rule ID {rule_id} not found in the rulebook.")
-        node_id = self.rule_to_node_id[rule_id]
-        rule = self.priority_graph.nodes[node_id]["rules"][rule_id]
-        return rule(traj)
-
-    def evaluate_trajectory_all(self, traj):
-        """
-        Evaluates a trajectory on all rules in the rulebook.
-        """
-        violations = []
-        violation_histories = []
-        for rule_id in self.rule_ids:
-            node_id = self.rule_to_node_id[rule_id]
-            rule = self.priority_graph.nodes[node_id]["rules"][rule_id]
-            violation, violation_history = rule(traj)
-            violations.append(violation)
-            violation_histories.append(violation_history)
-        return violations, violation_histories
-
-    def compare_trajectories(self, traj1, traj2):
-        """
-        Compares two trajectories with respect to the rulebook.
-        """
-        f1_vals = {}
-        f2_vals = {}
-        for node_id in self.priority_graph.nodes():
-            node = self.priority_graph.nodes[node_id]
-            if len(node["rules"]) > 1:
-                f1_vals[node_id] = sum(
-                    [rule(traj1) for rule in node["rules"].values()]
-                ) / len(node["rules"])
-                f2_vals[node_id] = sum(
-                    [rule(traj2) for rule in node["rules"].values()]
-                ) / len(node["rules"])
-            else:
-                f1_vals[node_id] = node["rules"][list(node["rules"].keys())[0]](traj1)
-                f2_vals[node_id] = node["rules"][list(node["rules"].keys())[0]](traj2)
-        if self.verbosity >= 2:
-            print("f1_vals:", f1_vals)
-            print("f2_vals:", f2_vals)
-
-        traj1_worse_nodes = [
-            f for f in self.priority_graph.nodes() if f1_vals[f] > f2_vals[f]
-        ]
-        traj2_worse_nodes = [
-            f for f in self.priority_graph.nodes() if f1_vals[f] < f2_vals[f]
-        ]
-        equal_nodes = [
-            f for f in self.priority_graph.nodes() if f1_vals[f] == f2_vals[f]
-        ]
-        if self.verbosity >= 2:
-            print("traj1_worse_nodes:", traj1_worse_nodes)
-            print("traj2_worse_nodes:", traj2_worse_nodes)
-            print("equal_nodes:", equal_nodes)
-
-        def is_defended(worse_nodes, defender_condition):
-            for node in worse_nodes:
-                ancestors = nx.ancestors(self.priority_graph, node)
-                if not any(defender_condition(a) for a in ancestors):
-                    return False  # this worse node is not defended
-            return True
-
-        traj1_defended = is_defended(
-            traj1_worse_nodes, lambda f: f1_vals[f] < f2_vals[f]
-        )
-        traj2_defended = is_defended(
-            traj2_worse_nodes, lambda f: f1_vals[f] > f2_vals[f]
-        )
-        if self.verbosity >= 2:
-            print("traj1_defended:", traj1_defended)
-            print("traj2_defended:", traj2_defended)
-
-        if not traj1_worse_nodes and not traj2_worse_nodes:
-            if self.verbosity >= 2:
-                print("Trajectories are equal.")
-            return Relation.EQUAL
-        elif (traj1_worse_nodes and traj1_defended) or not traj1_worse_nodes:
-            if self.verbosity >= 2:
-                print("Trajectory 1 is better.")
-            return Relation.LARGER
-        elif (traj2_worse_nodes and traj2_defended) or not traj2_worse_nodes:
-            if self.verbosity >= 2:
-                print("Trajectory 2 is better.")
-            return Relation.SMALLER
-        else:
-            if self.verbosity >= 2:
-                print("Trajectories are non-comparable.")
-            return Relation.NONCOMPARABLE
 
     def visualize_rulebook(self, output_file_name="merged_rule_graph.png"):
         ranks = {}
@@ -411,7 +278,7 @@ class Rulebook:
             labels=labels,
             with_labels=True,
             node_color="lightblue",
-            node_size=3000,
+            node_size=1000,
             font_size=10,
             arrows=True,
         )
@@ -462,7 +329,124 @@ class Rulebook:
                 "Cycles in the rulebook:", list(nx.simple_cycles(self.priority_graph))
             )
             raise ValueError("The rulebook contains cycles. Please double check!")
+    
+    @property
+    def root_nodes(self):
+        return [n for n, d in self.priority_graph.in_degree() if d == 0]
+    
+    def evaluate(self, realization):
+        rule_engine = RuleEngine(self.rule_id_to_rule)
+        handler = VariableHandler(realization)
+        result = rule_engine.evaluate(handler)
+        return result
 
+    def evaluate_with_cache(self, rule_parameter_result_dict, scenario):
+        rule_engine = RuleEngine(self.rule_id_to_rule)
+        result = rule_engine.evaluate_with_cache(rule_parameter_result_dict, scenario)
+        return result
+    
+    def compare_trajectories(self, realization1, realization2):
+        handler1 = VariableHandler(realization1)
+        handler2 = VariableHandler(realization2)
+
+        r1_advocates = set()
+        r2_advocates = set()
+
+        for root in self.root_nodes:
+            self._compare_trajectories(
+                root, handler1, handler2, r1_advocates, r2_advocates
+            )
+
+        def win_condition(set1, set2):
+            for rule in set1:
+                if all(nx.has_path(self.priority_graph, rule, other) for other in set2):
+                    return True, rule
+            return False, None
+
+        win_1, winning_node_1 = win_condition(r1_advocates, r2_advocates)
+
+        if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_1:
+            return Relation.LARGER, winning_node_1
+
+        win_2, winning_node_2 = win_condition(r2_advocates, r1_advocates)
+
+        if (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_2:
+            return Relation.SMALLER, winning_node_2
+        elif len(r1_advocates) == 0 and len(r2_advocates) == 0:
+            return Relation.EQUAL, None
+        else:
+            return Relation.NONCOMPARABLE, None
+
+    def _compare_trajectories(
+        self, node_id, handler1, handler2, r1_advocates, r2_advocates
+    ):
+        rules = self.priority_graph.nodes[node_id]["rules"]
+        result1 = 0
+        result2 = 0
+        for rule_id, rule in rules.items():
+            result1 += rule.evaluate(handler1)
+            result2 += rule.evaluate(handler2)
+
+        result1 /= len(rules)
+        result2 /= len(rules)
+
+        if result1 < result2:
+            r1_advocates.add(node_id)
+        elif result1 > result2:
+            r2_advocates.add(node_id)
+        else:
+            for child_node_id in self.priority_graph.successors(node_id):
+                self._compare_trajectories(
+                    child_node_id, handler1, handler2, r1_advocates, r2_advocates
+                )
+                
+    def compare_results(self, results1, results2):
+        r1_advocates = set()
+        r2_advocates = set()
+
+        for root in self.root_nodes:
+            self._compare_results(root, results1, results2, r1_advocates, r2_advocates)
+
+        def win_condition(set1, set2):
+            for rule in set1:
+                if all(nx.has_path(self.priority_graph, rule, other) for other in set2):
+                    return True, rule
+            return False, None
+
+        win_1, winning_node_1 = win_condition(r1_advocates, r2_advocates)
+
+        if (len(r1_advocates) > 0 and len(r2_advocates) == 0) or win_1:
+            return Relation.LARGER, winning_node_1
+
+        win_2, winning_node_2 = win_condition(r2_advocates, r1_advocates)
+        if (len(r2_advocates) > 0 and len(r1_advocates) == 0) or win_2:
+            return Relation.SMALLER, winning_node_2
+        elif len(r1_advocates) == 0 and len(r2_advocates) == 0:
+            return Relation.EQUAL, None
+        else:
+            return Relation.NONCOMPARABLE, None
+
+    def _compare_results(self, node_id, results1, results2, r1_advocates, r2_advocates):
+        result1 = 0
+        result2 = 0
+        rules = self.priority_graph.nodes[node_id]["rules"]
+        for rule_id, rule in rules.items():
+            result1 += results1[rule_id]
+            result2 += results2[rule_id]
+
+        result1 /= len(rules)
+        result2 /= len(rules)
+
+        if result1 < result2:
+            r1_advocates.add(node_id)
+        elif result1 > result2:
+            r2_advocates.add(node_id)
+        else:
+            for child_node_id in self.priority_graph.successors(node_id):
+                self._compare_results(
+                    child_node_id, results1, results2, r1_advocates, r2_advocates
+                )
+            
     def compute_error_weight(self):
         level = {}
         for node in nx.topological_sort(self.priority_graph):
@@ -506,6 +490,7 @@ class Rulebook:
             normalized_error_value (float): The normalized error value in [0, 1].
             violated_rules (list): A list of names of the violated rules.
         """
+        # TODO: fix this
         if self.verbosity >= 2:
             print(f"Results:")
             for rule_name, result in results.items():
@@ -524,24 +509,6 @@ class Rulebook:
             error_value / self.sum_error_weight if self.sum_error_weight > 0 else 0
         )
         return error_value, normalized_error_value, violated_rules
-
-    def __call__(self, traj):
-        return self.evaluate_trajectory_all(traj)
-
-
-class Rule:
-    def __init__(self, id, func, name="", description="", args=None):
-        self.id = id
-        self.func = func
-        self.name = name
-        self.description = description
-        self.args = args if args is not None else {}
-
-    def print(self):
-        print(f"id:{self.id}, name: {self.name}, functions: {self.func}")
-
-    def __call__(self, realization, start_index=None, end_index=None):
-        return self.func(realization, start_index, end_index, **self.args)
 
 
 class Result:
@@ -688,16 +655,29 @@ class RuleEngine:
 
 
 if __name__ == "__main__":
-    rb = Rulebook()
-    rb._parse_rules("test_functions.py")
-    rb._parse_rulebook_from_file("../../example/example_rulebook_0.graph")
-    from test_functions import test_func_1
-
-    rb.add_rule(7, "Test rule 7", test_func_1)
-    rb.add_rule_relation(7, 4, Relation.LARGER)
+    from rule_functions import (
+        f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15,
+    )
+    rule_id_to_rule = {
+        1: f1,
+        2: f2,
+        3: f3,
+        4: f4,
+        5: f5,
+        6: f6,
+        7: f7,
+        8: f8,
+        9: f9,
+        10: f10,
+        11: f11,
+        12: f12,
+        13: f13,
+        14: f14,
+        15: f15,
+    }
+    rb = Rulebook(rule_id_to_rule=rule_id_to_rule, rulebook_file="../reasonable_crowd/reasonable_crowd.graph")
     rb.print_adjacency_matrix()
     rb.remove_rule(7)
     rb.print_adjacency_matrix()
-    rb.visualize_rulebook(output_file_name="../../example/example_rulebook_0.png")
-
-    rb.compare_trajectories("a", "b")
+    rb.add_rule(f7)
+    rb.visualize_rulebook(output_file_name="temp.png")
