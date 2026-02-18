@@ -139,9 +139,9 @@ class Rulebook:
             self.check_rulebook()
 
             if self.verbosity >= 2:
-                for id in self.priority_graph.nodes():
-                    for rule_id in self.priority_graph.nodes[id]["rules"]:
-                        rule = self.priority_graph.nodes[id]["rules"][rule_id]
+                for node_id in self.priority_graph.nodes():
+                    for rule_id in self.priority_graph.nodes[node_id]["rules"]:
+                        rule = self.rule_id_to_rule[rule_id]
                         print(
                             f"Node {id} contains rule {rule_id} with name: {rule.name}, rule function: {rule.calculate_violation}"
                         )
@@ -152,13 +152,13 @@ class Rulebook:
         """
         Adds an isolated rule to the rulebook.
         """
-        id = rule_object.id
-        if id in self.rule_ids:
-            raise ValueError(f"Node ID {id} already exists in the rulebook.")
-        self.rule_ids.add(id)
-        self.rule_id_to_node_id[id] = id
-        self.rule_id_to_rule[id] = rule_object
-        self.priority_graph.add_node(id, rules={id: rule_object})
+        rule_id = rule_object.id
+        if rule_id in self.rule_ids:
+            raise ValueError(f"Rule ID {rule_id} already exists in the rulebook.")
+        self.rule_ids.add(rule_id)
+        self.rule_id_to_node_id[rule_id] = rule_id
+        self.rule_id_to_rule[rule_id] = rule_object
+        self.priority_graph.add_node(rule_id, rules={rule_id})
 
     def add_rule_relation(self, rule_id_1, rule_id_2, relation=Relation.LARGER):
         """
