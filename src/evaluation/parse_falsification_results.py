@@ -23,7 +23,7 @@ def parse_log_file(log_path):
 
         # Detect start of a scenario result block
         elif "Results for" in line and "with seed" in line:
-            # Extract scenario name (e.g., representative20_11)
+            # Extract scenario name (e.g., common20_11)
             parts = line.split("Results for")[-1].split()
             scenario_name = parts[0].split(".scenic")[0]
 

@@ -18,31 +18,9 @@ from scenic.core.simulators import Action
 from scenic.simulators.metadrive import MetaDriveSimulator
 from shapely.geometry import LineString, Point, Polygon
 
-from scenarios.utils import visualize_simulation
-
 MAX_STEPS = 200
 METADRIVE_PPO_PATH = "assets/expert_weights.npz" # could be downloaded from https://github.com/metadriverse/metadrive/blob/main/metadrive/examples/ppo_expert/expert_weights.npz
 VERBOSITY = 1
-
-
-def run_metadrive_scenario(file_path, max_steps=100, seed=None, maxIterations=1):
-    if seed is not None:
-        random.seed(seed)
-    print("Constructing scenario...")
-    scenario = scenic.scenarioFromFile(
-        file_path, model="scenic.simulators.metadrive.model", mode2D=True
-    )
-    scenic.setDebuggingOptions(verbosity=0, fullBacktrace=True)
-    print("Generating scene...")
-    scene, _ = scenario.generate()
-    simulator = MetaDriveSimulator(sumo_map="../../maps/Town05.net.xml")
-    simulation = simulator.simulate(
-        scene, maxSteps=max_steps, maxIterations=maxIterations
-    )
-    print(simulation)
-    if not simulation:
-        raise RuntimeError("Simulation failed.")
-    return simulation
 
 
 class MetaDrivePolicyAgent(Agent):
@@ -566,22 +544,3 @@ class MetaDrivePolicyAction(AgentAction):
         agent.setBraking(brake)
         agent.setSteering(steer)
 
-
-if __name__ == "__main__":
-    simulation = run_metadrive_scenario(
-        "example_intersection_01.scenic", max_steps=MAX_STEPS, seed=12
-    )  # seed = 12, 123
-    visualize_simulation(
-        simulation,
-        ids=[
-            "egoPoly",
-            "advPoly",
-            "egoLanePoly",
-            "advLanePoly",
-            "egoConnectingLanePoly",
-            "egoEndLanePoly",
-        ],
-        save_path="metadrive_expert.mp4",
-    )
-    # simulation = run_metadrive_scenario("example_crash_waymo.scenic", max_steps=MAX_STEPS, seed=12) #seed = 12, 123
-    # visualize_simulation(simulation, ids=['egoPoly', 'advPoly', 'bicyclePoly', 'egoLanePoly', 'advLanePoly', 'bicycleLanePoly', 'egoConnectingLanePoly', 'egoEndLanePoly'], save_path='metadrive_expert.mp4')
