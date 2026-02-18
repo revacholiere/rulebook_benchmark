@@ -544,6 +544,12 @@ class Rulebook:
         for rule_id, params in config.items():
             self.rule_id_to_rule[rule_id].parameters.update(params)
 
+    def get_config(self):
+        config = {}
+        for rule_id, rule in self.rule_id_to_rule.items():
+            config[rule_id] = rule.parameters
+        return config
+
 
 class Result:
     def __init__(self, minimum_violation=0, aggregation_method=max):

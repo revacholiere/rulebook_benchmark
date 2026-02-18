@@ -84,6 +84,7 @@ def optimize_rulebook_greedy_by_priority(
 
     skip: set of rule IDs to skip during optimization
     """
+    default_config = rulebook.get_config()
 
     graph = rulebook.priority_graph
     try:
@@ -155,7 +156,7 @@ def optimize_rulebook_greedy_by_priority(
                         print(f"  {trial_params} -> Train={train_score:.6f}")
 
                     if train_score > local_best_train:
-                        print(train_score, local_best_train)
+                        # print(train_score, local_best_train)
                         best_local_params = trial_params.copy()
                         local_best_train = train_score
                         # print(best_local_params)
