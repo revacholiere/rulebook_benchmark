@@ -16,27 +16,25 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from rulebook_benchmark.process_trajectory import process_trajectory
 from rulebook_benchmark.realization import Realization, VariableHandler
 from rulebook_benchmark.rule_functions import (
-    Result,
-    RuleEngine,
-    f1,
-    f2,
-    f3,
-    f4,
-    f5,
-    f6,
-    f7,
-    f8,
-    f9,
+    f1, 
+    f2, 
+    f3, 
+    f4, 
+    f5, 
+    f6, 
+    f7, 
+    f8, 
+    f9, 
+    f10,
     f11,
     f12,
     f13,
-    f15,
-    f17,
-    f18,
+    f14,
+    f15
 )
-from rulebook_benchmark.rulebook import Rulebook
+from rulebook_benchmark.rulebook import Rulebook, Result, RuleEngine, Rule
 from rulebook_benchmark.samplers import CrossEntropySampler, MultiArmedBanditSampler
-from scenarios.run_scenic_test import visualize_simulation
+from scenarios.utils import visualize_simulation
 
 ruleset = {
     "vru_collision": f1,
@@ -48,13 +46,20 @@ ruleset = {
     "correct_side": f7,
     "vru_offroad": f8,
     "vru_onroad": f9,
-    "front_clearance_buffer": f11,
-    "left_clearance_buffer": f12,
-    "right_clearance_buffer": f13,
-    "speed_limit": f15,
-    "lane_keeping": f17,
-    "lane_centering": f18,
+    "front_clearance_buffer": f10,
+    "left_clearance_buffer": f11,
+    "right_clearance_buffer": f12,
+    "speed_limit": f13,
+    "lane_keeping": f14,
+    "lane_centering": f15
 }
+def reaching_goal(simulation, step):
+    assert (
+        "egoReachedGoal" in simulation.records
+    ), "egoReachedGoal not recorded in the simulation."
+    reached_goal = simulation.records["egoReachedGoal"][step][1]
+    return 0 if reached_goal else 1
+f16 = Rule(reaching_goal, min, "reaching_goal", 16)
 
 ROOT = Path(__file__).parent
 log = logging.getLogger(__name__)
@@ -100,8 +105,8 @@ def run_evaluation(cfg, seed):
     print(f"Parameter domain: {param_domain}")
     sampler = sampler_factory(cfg, param_domain)
     # Rulebook
-    rulebook = Rulebook()
-    rulebook._parse_rulebook_from_file(cfg["rulebook"]["file_path"])
+    rule_id_to_rule = {1: f1, 2: f2, 3: f3, 4: f4, 5: f5, 6: f6, 7: f7, 8: f8, 9: f9, 10: f10, 11: f11, 12: f12, 13: f13, 14: f14, 15: f15, 16: f16}
+    rulebook = Rulebook(rule_id_to_rule, cfg["rulebook"]["file_path"])
     rulebook.compute_error_weight()
     # Results
     avg_error_value = 0
@@ -144,7 +149,6 @@ def run_evaluation(cfg, seed):
         scenario = scenic.scenarioFromFile(
             cfg["scenic"]["file_path"], model=model, params=params, mode2D=True
         )
-        # scene, _ = scenario.generate()
 
         ### Run the simulation and evaluate ###
         try:
@@ -202,8 +206,6 @@ def run_evaluation(cfg, seed):
     unique_violations_lists = [list(s) for s in unique_violations]
     log.info("Unique violations: " + str(unique_violations_lists))
 
-    # if simulator._destroyed is False:
-    #    simulator.destroy()
     simulator.destroy()
 
 
@@ -227,7 +229,10 @@ def simulate_and_eval(simulator, scenario, realization, rulebook, cfg, idx=0):
     ### Evaluate the result ###
     results = get_rule_violations(realization)
     if cfg["rulebook"]["add_reaching_goal_rule"]:
-        results["reaching_goal"] = reaching_goal(simulation)
+        result = Result(minimum_violation=1, aggregation_method=min)
+        for t in range(len(simulation.records["egoReachedGoal"])):
+            result.add(reaching_goal(simulation, t))
+        results["reaching_goal"] = result
     error_value, normalized_error_value, violated_rules = rulebook.compute_error_value(
         results
     )
@@ -253,20 +258,6 @@ def get_rule_violations(realization):
     results = rule_engine.evaluate(handler)
 
     return results
-
-
-def reaching_goal(simulation):
-    assert (
-        "egoReachedGoal" in simulation.records
-    ), "egoReachedGoal not recorded in the simulation."
-    result = Result(minimum_violation=1, aggregation_method=min)
-    for t in range(len(simulation.records["egoReachedGoal"])):
-        reached_goal = simulation.records["egoReachedGoal"][t][1]
-        if reached_goal:
-            result.add(0)
-        else:
-            result.add(1)
-    return result
 
 
 def sampler_factory(cfg, param_domain):
