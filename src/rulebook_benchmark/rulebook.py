@@ -4,7 +4,7 @@ from enum import Enum
 import matplotlib.pyplot as plt
 import networkx as nx
 
-from realization import VariableHandler
+from rulebook_benchmark.realization import VariableHandler
 
 class FunctionVisitor(ast.NodeVisitor):
     def __init__(self):
@@ -32,6 +32,7 @@ class Rulebook:
         self.priority_graph = nx.DiGraph()
         self.rule_ids = set()
         self.rule_id_to_rule = rule_id_to_rule
+        self.rule_name_to_rule_id = {rule.name: rule_id for rule_id, rule in rule_id_to_rule.items()}
         self.rule_id_to_node_id = {} # mapping from rule id to node id in the priority graph
         if rulebook_file:
             self._parse_rulebook_from_file(rulebook_file)
@@ -71,6 +72,7 @@ class Rulebook:
                 # Node
                 if rule_section:
                     rule_id = int(line.strip())
+                    assert rule_id in self.rule_id_to_rule, f"Rule ID {rule_id} not found in the provided rule_id_to_rule dictionary."
                     rule = self.rule_id_to_rule[rule_id]
                     self.rule_ids.add(rule_id)
                     self.rule_id_to_node_id[rule_id] = rule_id
@@ -116,7 +118,7 @@ class Rulebook:
                 for id in self.priority_graph.nodes():
                     for rule_id in self.priority_graph.nodes[id]["rules"]:
                         rule = self.priority_graph.nodes[id]["rules"][rule_id]
-                        rule.print()
+                        print(f"Node {id} contains rule {rule_id} with name: {rule.name}, rule function: {rule.calculate_violation}")
                 print(f"Nodes: {self.priority_graph.nodes(data=True)}")
                 print(f"Edges: {self.priority_graph.edges()}")
 
@@ -130,6 +132,7 @@ class Rulebook:
         self.rule_ids.add(id)
         self.rule_id_to_node_id[id] = id
         self.rule_id_to_rule[id] = rule_object
+        self.rule_name_to_rule_id[rule_object.name] = id
         self.priority_graph.add_node(id, rules={id: rule_object})
 
     def add_rule_relation(self, rule_id_1, rule_id_2, relation=Relation.LARGER):
@@ -197,6 +200,8 @@ class Rulebook:
                     self.rule_id_to_node_id[id] = new_resp
         self.rule_ids.remove(rule_id)
         self.rule_id_to_node_id.pop(rule_id)
+        self.rule_name_to_rule_id.pop(self.rule_id_to_rule[rule_id].name)
+        self.rule_id_to_rule.pop(rule_id)
 
     def remove_rule_relation(self, rule_id_1, rule_id_2):
         """
@@ -490,7 +495,6 @@ class Rulebook:
             normalized_error_value (float): The normalized error value in [0, 1].
             violated_rules (list): A list of names of the violated rules.
         """
-        # TODO: fix this
         if self.verbosity >= 2:
             print(f"Results:")
             for rule_name, result in results.items():
@@ -498,10 +502,10 @@ class Rulebook:
         error_value = 0
         violated_rules = []
         for rule_name, result in results.items():
-            if rule_name not in self.name_to_id:
+            if rule_name not in self.get_rule_names():
                 continue
-            rule_id = self.name_to_id[rule_name]
-            node_id = self.rule_to_node_id[rule_id]
+            rule_id = self.rule_name_to_rule_id[rule_name]
+            node_id = self.rule_id_to_node_id[rule_id]
             if result.total_violation > 0:
                 error_value += 2 ** self.error_weight[node_id]
                 violated_rules.append(rule_name)
@@ -652,32 +656,3 @@ class RuleEngine:
                     print(d)
                 pass
         return results
-
-
-if __name__ == "__main__":
-    from rule_functions import (
-        f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15,
-    )
-    rule_id_to_rule = {
-        1: f1,
-        2: f2,
-        3: f3,
-        4: f4,
-        5: f5,
-        6: f6,
-        7: f7,
-        8: f8,
-        9: f9,
-        10: f10,
-        11: f11,
-        12: f12,
-        13: f13,
-        14: f14,
-        15: f15,
-    }
-    rb = Rulebook(rule_id_to_rule=rule_id_to_rule, rulebook_file="../reasonable_crowd/reasonable_crowd.graph")
-    rb.print_adjacency_matrix()
-    rb.remove_rule(7)
-    rb.print_adjacency_matrix()
-    rb.add_rule(f7)
-    rb.visualize_rulebook(output_file_name="temp.png")
