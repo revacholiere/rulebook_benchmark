@@ -1,10 +1,10 @@
 import os
 import pickle
+from collections import Counter
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
-from collections import Counter
 
 from reasonable_crowd.dataset import (
     build_evaluation_dataset,
@@ -12,7 +12,6 @@ from reasonable_crowd.dataset import (
     load_annotations,
 )
 from reasonable_crowd.evaluation import evaluate_rulebook_with_cache
-from reasonable_crowd.InPlaceRulebook import InPlaceRulebook
 from reasonable_crowd.optimization import (
     brute_force_group_optimization,
     cache_rule_evaluations,
@@ -32,14 +31,15 @@ from rulebook_benchmark.rule_functions import (
     f7,
     f8,
     f9,
+    f10,
     f11,
     f12,
     f13,
+    f14,
     f15,
-    f17,
-    f18,
 )
 from rulebook_benchmark.rulebook import Rulebook
+from rulebook_benchmark.utils import apply_config
 
 SEED = 50
 NUM_RUNS = 10
@@ -53,7 +53,7 @@ network_U = parse_map(map_directory, "U")
 network_S = parse_map(map_directory, "S")
 
 output_directory = "outputs"
-output_file = os.path.join(output_directory, "results_scenic.txt")
+
 
 print("Getting trajectories...")
 
@@ -91,14 +91,14 @@ rule_id_to_rule = {
     7: f7,
     8: f8,
     9: f9,
+    10: f10,
     11: f11,
     12: f12,
     13: f13,
+    14: f14,
     15: f15,
-    17: f17,
-    18: f18,
 }
-rulebook = InPlaceRulebook(rule_id_to_rule, rulebook_file)
+rulebook = Rulebook(rule_id_to_rule, rulebook_file)
 
 
 rule_id_to_params = {
@@ -107,10 +107,10 @@ rule_id_to_params = {
     8: ["threshold"],
     9: ["threshold"],
     5: ["velocity", "threshold", "timesteps"],
+    10: ["threshold"],
     11: ["threshold"],
     12: ["threshold"],
-    13: ["threshold"],
-    18: ["buffer"],
+    15: ["buffer"],
 }
 rule_id_to_values = {
     4: {"threshold": [0.6, 0.8, 1, 1.2]},
@@ -122,10 +122,10 @@ rule_id_to_values = {
         "threshold": [-1.5, -1, -0.5],
         "timesteps": [20, 30, 40],
     },
+    10: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     11: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     12: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    13: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    18: {"buffer": [0.3, 0.5, 0.7]},
+    15: {"buffer": [0.3, 0.5, 0.7]},
 }
 
 default_params = {}
@@ -155,11 +155,10 @@ else:
     )
 
     print("Restoring default rulebook parameters...")
-    for rule_id, params in default_params.items():
-        rule_id_to_rule[rule_id].parameters.update(params)
+    rulebook.apply_config(default_params)
 
 
-groups = [[1, 2], [3, 7], [8, 9, 11, 12, 13], [17, 18, 15], [4, 5, 6]]
+groups = [[1, 2], [3, 7], [8, 9, 10, 11, 12], [14, 15, 13], [4, 5, 6]]
 name_to_group = {
     "safety-critical": groups[0],
     "operation-limit": groups[1],
@@ -200,8 +199,6 @@ correct_list = []
 
 
 for run in range(NUM_RUNS):
-    # Shuffle df
-
     # Prepare data
     X = df["X"].tolist()
     y = df["y"].tolist()
@@ -256,6 +253,7 @@ for run in range(NUM_RUNS):
 
         # Apply best config to the rulebook
         for rule_id, params in best_config.items():
+            # print(f"Rule {rule_id} optimized parameters: {params}")
             rule = rule_id_to_rule[rule_id]
             rule.parameters.update(params)
 
@@ -397,18 +395,14 @@ print("----------------------")
 
 from rulebook_benchmark.rule_functions import (
     f7_alt,
+    f10_sum,
+    f10_v,
     f11_sum,
     f11_v,
     f12_sum,
     f12_v,
-    f13_sum,
-    f13_v,
 )
 
-rb = Rulebook(
-    rule_file="reasonable_crowd_rule_functions.py",
-    rulebook_file="reasonable_crowd_5.graph",
-)
 rule_id_to_rule = {
     1: f1,
     2: f2,
@@ -419,13 +413,14 @@ rule_id_to_rule = {
     7: f7,
     8: f8,
     9: f9,
+    10: f10,
     11: f11,
     12: f12,
     13: f13,
+    14: f14,
     15: f15,
-    17: f17,
-    18: f18,
 }
+
 rule_id_to_rule_alt = {
     1: f1,
     2: f2,
@@ -436,12 +431,12 @@ rule_id_to_rule_alt = {
     7: f7,
     8: f8,
     9: f9,
+    10: f10_v,
     11: f11_v,
     12: f12_v,
-    13: f13_v,
+    13: f13,
+    14: f14,
     15: f15,
-    17: f17,
-    18: f18,
 }
 rule_id_to_rule_side = {
     1: f1,
@@ -453,12 +448,12 @@ rule_id_to_rule_side = {
     7: f7_alt,
     8: f8,
     9: f9,
+    10: f10,
     11: f11,
     12: f12,
     13: f13,
+    14: f14,
     15: f15,
-    17: f17,
-    18: f18,
 }
 rule_id_to_rule_sum = {
     1: f1,
@@ -470,28 +465,28 @@ rule_id_to_rule_sum = {
     7: f7,
     8: f8,
     9: f9,
+    10: f10_sum,
     11: f11_sum,
     12: f12_sum,
-    13: f13_sum,
+    13: f13,
+    14: f14,
     15: f15,
-    17: f17,
-    18: f18,
 }
 
-rulebook = InPlaceRulebook(rule_id_to_rule, rulebook_file)
-rulebook_alt = InPlaceRulebook(rule_id_to_rule_alt, rulebook_file)
-rulebook_side = InPlaceRulebook(rule_id_to_rule_side, rulebook_file)
-rulebook_sum = InPlaceRulebook(rule_id_to_rule_sum, rulebook_file)
+rulebook = Rulebook(rule_id_to_rule, rulebook_file)
+rulebook_alt = Rulebook(rule_id_to_rule_alt, rulebook_file)
+rulebook_side = Rulebook(rule_id_to_rule_side, rulebook_file)
+rulebook_sum = Rulebook(rule_id_to_rule_sum, rulebook_file)
 rule_id_to_params = {
     4: ["threshold"],
     6: ["threshold"],
     8: ["threshold"],
     9: ["threshold"],
     5: ["velocity", "threshold", "timesteps"],
+    10: ["threshold"],
     11: ["threshold"],
     12: ["threshold"],
-    13: ["threshold"],
-    18: ["buffer"],
+    15: ["buffer"],
 }
 rule_id_to_values = {
     4: {"threshold": [0.6, 0.8, 1, 1.2]},
@@ -499,10 +494,10 @@ rule_id_to_values = {
     8: {"threshold": [0.5, 1, 1.5, 2]},
     9: {"threshold": [0.5, 1, 1.5, 2]},
     5: {"velocity": [4], "threshold": [-1.5, -1, -0.5], "timesteps": [30]},
+    10: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     11: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     12: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    13: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    18: {"buffer": [0.3, 0.5, 0.8]},
+    15: {"buffer": [0.3, 0.5, 0.8]},
 }
 
 
@@ -512,10 +507,10 @@ rule_id_to_params_alt = {
     8: ["threshold"],
     9: ["threshold"],
     5: ["velocity", "threshold", "timesteps"],
+    10: ["threshold"],
     11: ["threshold"],
     12: ["threshold"],
-    13: ["threshold"],
-    18: ["buffer"],
+    15: ["buffer"],
 }
 rule_id_to_values_alt = {
     4: {"threshold": [0.6, 0.8, 1, 1.2]},
@@ -523,10 +518,10 @@ rule_id_to_values_alt = {
     8: {"threshold": [0.5, 1, 1.5, 2]},
     9: {"threshold": [0.5, 1, 1.5, 2]},
     5: {"velocity": [4], "threshold": [-1.5, -1, -0.5], "timesteps": [30]},
+    10: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     11: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     12: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    13: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    18: {"buffer": [0.3, 0.5, 0.8]},
+    15: {"buffer": [0.3, 0.5, 0.8]},
 }
 
 rule_id_to_params_side = {
@@ -535,10 +530,10 @@ rule_id_to_params_side = {
     8: ["threshold"],
     9: ["threshold"],
     5: ["velocity", "threshold", "timesteps"],
+    10: ["threshold"],
     11: ["threshold"],
     12: ["threshold"],
-    13: ["threshold"],
-    18: ["buffer"],
+    15: ["buffer"],
     7: ["fine_grained"],
 }
 rule_id_to_values_side = {
@@ -547,10 +542,10 @@ rule_id_to_values_side = {
     8: {"threshold": [0.5, 1, 1.5, 2]},
     9: {"threshold": [0.5, 1, 1.5, 2]},
     5: {"velocity": [4], "threshold": [-1.5, -1, -0.5], "timesteps": [30]},
+    10: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     11: {"threshold": [0.4, 0.8, 1.2, 1.6]},
     12: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    13: {"threshold": [0.4, 0.8, 1.2, 1.6]},
-    18: {"buffer": [0.3, 0.5, 0.8]},
+    15: {"buffer": [0.3, 0.5, 0.8]},
     7: {"fine_grained": [True, False]},
 }
 
@@ -579,9 +574,9 @@ alt_cache_dict = {}
 sum_cache_dict = {}
 side_cache_dict = {}
 
-# copy tuning cache into alt tuning cache except for rules 11 12 13
+# copy tuning cache into alt tuning cache except for rules 10 11 12
 for rule_id in cache_dict:
-    if rule_id in [11, 12, 13]:
+    if rule_id in [10, 11, 12]:
         continue
     alt_cache_dict[rule_id] = cache_dict[rule_id]
     sum_cache_dict[rule_id] = cache_dict[rule_id]
@@ -653,7 +648,7 @@ else:
         open(os.path.join(output_directory, "sum_tuning_cache.pkl"), "wb"),
     )
 
-groups = [[1, 2], [3, 7], [8, 9, 11, 12, 13], [17, 18, 15], [4, 6, 5]]
+groups = [[1, 2], [3, 7], [8, 9, 10, 11, 12], [14, 15, 13], [4, 6, 5]]
 name_to_group = {
     "safety-critical": groups[0],
     "operation-limit": groups[1],

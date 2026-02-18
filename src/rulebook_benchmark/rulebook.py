@@ -1,10 +1,13 @@
 import ast
 from collections import defaultdict
 from enum import Enum
+from logging import config
+
 import matplotlib.pyplot as plt
 import networkx as nx
 
-from realization import VariableHandler
+from rulebook_benchmark.realization import VariableHandler
+
 
 class FunctionVisitor(ast.NodeVisitor):
     def __init__(self):
@@ -28,13 +31,33 @@ class Rulebook:
             rule_id_to_rule (dict): A dictionary mapping rule ids to Rule objects.
             rulebook_file (string): Path to the rulebook file.
         """
+        self.rulebook_file = rulebook_file
         self.verbosity = 1
         self.priority_graph = nx.DiGraph()
         self.rule_ids = set()
-        self.rule_id_to_rule = rule_id_to_rule
-        self.rule_id_to_node_id = {} # mapping from rule id to node id in the priority graph
+        self.rule_id_to_rule = {}
+        for rule_id, rule in rule_id_to_rule.items():
+            self.rule_id_to_rule[rule_id] = rule.copy()
+        self.rule_id_to_node_id = (
+            {}
+        )  # mapping from rule id to node id in the priority graph
         if rulebook_file:
             self._parse_rulebook_from_file(rulebook_file)
+
+    def copy(self):
+        copy_rules = {}
+        for rule_id, rule in self.rule_id_to_rule.items():
+            copy_rules[rule_id] = rule.copy()
+
+        # create new rulebook, then copy the priority graph structure
+        new_rulebook = Rulebook(copy_rules, self.rulebook_file)
+        # Sever all edges, then copy edges from original graph
+        new_rulebook.priority_graph.remove_edges_from(
+            list(new_rulebook.priority_graph.edges())
+        )
+        new_rulebook.priority_graph.add_edges_from(self.priority_graph.edges())
+
+        return new_rulebook
 
     def _parse_rulebook_from_file(self, rulebook_file):
         """
@@ -74,7 +97,9 @@ class Rulebook:
                     rule = self.rule_id_to_rule[rule_id]
                     self.rule_ids.add(rule_id)
                     self.rule_id_to_node_id[rule_id] = rule_id
-                    self.priority_graph.add_node(rule_id, rules={rule_id: rule})
+                    self.priority_graph.add_node(
+                        rule_id, rules={rule_id}
+                    )  # create set for rules at the node
                     if self.verbosity >= 2:
                         print(
                             f"Add rule {rule_id} with name: {rule.name}, rule function: {rule.calculate_violation}"
@@ -86,11 +111,9 @@ class Rulebook:
                     rep = int(same_level_info[0])
                     for i in range(1, len(same_level_info)):
                         self.rule_id_to_node_id[int(same_level_info[i])] = rep
-                        self.priority_graph.nodes[rep]["rules"][
+                        self.priority_graph.nodes[rep]["rules"].add(
                             int(same_level_info[i])
-                        ] = self.priority_graph.nodes[int(same_level_info[i])]["rules"][
-                            int(same_level_info[i])
-                        ]
+                        )
                         self.priority_graph.remove_node(int(same_level_info[i]))
                         if self.verbosity >= 2:
                             print(
@@ -115,7 +138,7 @@ class Rulebook:
             if self.verbosity >= 2:
                 for id in self.priority_graph.nodes():
                     for rule_id in self.priority_graph.nodes[id]["rules"]:
-                        rule = self.priority_graph.nodes[id]["rules"][rule_id]
+                        rule = self.rule_id_to_rule[rule_id]
                         rule.print()
                 print(f"Nodes: {self.priority_graph.nodes(data=True)}")
                 print(f"Edges: {self.priority_graph.edges()}")
@@ -124,13 +147,13 @@ class Rulebook:
         """
         Adds an isolated rule to the rulebook.
         """
-        id = rule_object.id
-        if id in self.rule_ids:
-            raise ValueError(f"Node ID {id} already exists in the rulebook.")
-        self.rule_ids.add(id)
-        self.rule_id_to_node_id[id] = id
-        self.rule_id_to_rule[id] = rule_object
-        self.priority_graph.add_node(id, rules={id: rule_object})
+        rule_id = rule_object.id
+        if rule_id in self.rule_ids:
+            raise ValueError(f"Rule ID {rule_id} already exists in the rulebook.")
+        self.rule_ids.add(rule_id)
+        self.rule_id_to_node_id[rule_id] = rule_id
+        self.rule_id_to_rule[rule_id] = rule_object
+        self.priority_graph.add_node(rule_id, rules={rule_id})
 
     def add_rule_relation(self, rule_id_1, rule_id_2, relation=Relation.LARGER):
         """
@@ -151,9 +174,9 @@ class Rulebook:
         elif relation == Relation.SMALLER:
             self.priority_graph.add_edge(resp_2, resp_1)
         elif relation == Relation.EQUAL:
-            for id, rule in self.priority_graph.nodes[resp_2]["rules"].items():
-                self.priority_graph.nodes[resp_1]["rules"][id] = rule
-                self.rule_id_to_node_id[id] = resp_1
+            for rule_id in self.priority_graph.nodes[resp_2]["rules"]:
+                self.priority_graph.nodes[resp_1]["rules"].add(rule_id)
+                self.rule_id_to_node_id[rule_id] = resp_1
             preds = list(self.priority_graph.predecessors(resp_2))
             succs = list(self.priority_graph.successors(resp_2))
             self.priority_graph.remove_node(resp_2)
@@ -182,9 +205,9 @@ class Rulebook:
             self.priority_graph.remove_node(resp)
             self.check_rulebook()
         else:
-            self.priority_graph.nodes[resp]["rules"].pop(rule_id)
+            self.priority_graph.nodes[resp]["rules"].remove(rule_id)
             if resp == rule_id:
-                new_resp = list(self.priority_graph.nodes[resp]["rules"].keys())[0]
+                new_resp = list(self.priority_graph.nodes[resp]["rules"])[0]
                 self.priority_graph.add_node(
                     new_resp, **self.priority_graph.nodes[resp]
                 )
@@ -269,8 +292,8 @@ class Rulebook:
 
         labels = {}
         for node in self.priority_graph.nodes():
-            rule = self.priority_graph.nodes[node]["rules"]
-            labels[node] = ", ".join([str(id) for id in rule.keys()])
+            rule_ids = self.priority_graph.nodes[node]["rules"]
+            labels[node] = ", ".join([str(rule_id) for rule_id in rule_ids])
         plt.figure(figsize=(12, 8))
         nx.draw(
             self.priority_graph,
@@ -329,11 +352,11 @@ class Rulebook:
                 "Cycles in the rulebook:", list(nx.simple_cycles(self.priority_graph))
             )
             raise ValueError("The rulebook contains cycles. Please double check!")
-    
+
     @property
     def root_nodes(self):
         return [n for n, d in self.priority_graph.in_degree() if d == 0]
-    
+
     def evaluate(self, realization):
         rule_engine = RuleEngine(self.rule_id_to_rule)
         handler = VariableHandler(realization)
@@ -344,7 +367,7 @@ class Rulebook:
         rule_engine = RuleEngine(self.rule_id_to_rule)
         result = rule_engine.evaluate_with_cache(rule_parameter_result_dict, scenario)
         return result
-    
+
     def compare_trajectories(self, realization1, realization2):
         handler1 = VariableHandler(realization1)
         handler2 = VariableHandler(realization2)
@@ -383,7 +406,8 @@ class Rulebook:
         rules = self.priority_graph.nodes[node_id]["rules"]
         result1 = 0
         result2 = 0
-        for rule_id, rule in rules.items():
+        for rule_id in rules:
+            rule = self.rule_id_to_rule[rule_id]
             result1 += rule.evaluate(handler1)
             result2 += rule.evaluate(handler2)
 
@@ -399,7 +423,7 @@ class Rulebook:
                 self._compare_trajectories(
                     child_node_id, handler1, handler2, r1_advocates, r2_advocates
                 )
-                
+
     def compare_results(self, results1, results2):
         r1_advocates = set()
         r2_advocates = set()
@@ -430,7 +454,7 @@ class Rulebook:
         result1 = 0
         result2 = 0
         rules = self.priority_graph.nodes[node_id]["rules"]
-        for rule_id, rule in rules.items():
+        for rule_id in rules:
             result1 += results1[rule_id]
             result2 += results2[rule_id]
 
@@ -446,7 +470,7 @@ class Rulebook:
                 self._compare_results(
                     child_node_id, results1, results2, r1_advocates, r2_advocates
                 )
-            
+
     def compute_error_weight(self):
         level = {}
         for node in nx.topological_sort(self.priority_graph):
@@ -510,6 +534,10 @@ class Rulebook:
         )
         return error_value, normalized_error_value, violated_rules
 
+    def apply_config(self, config):
+        for rule_id, params in config.items():
+            self.rule_id_to_rule[rule_id].parameters.update(params)
+
 
 class Result:
     def __init__(self, minimum_violation=0, aggregation_method=max):
@@ -540,12 +568,16 @@ class Rule:
         return self.calculate_violation(handler, step, **params)
 
     def copy(self):
+        # copy parameters
+        new_params = {}
+        for key, value in self.parameters.items():
+            new_params[key] = value
         return Rule(
             self.calculate_violation,
             self.aggregation_method,
             self.name,
             self.id,
-            **self.parameters,
+            **new_params,
         )
 
     def evaluate(self, handler, **runtime_params):
@@ -584,9 +616,9 @@ class Rule:
 
 
 class RuleEngine:
-    def __init__(self, rules):
+    def __init__(self, rule_id_to_rule):
         # rules is a dict: {"rule_name": Rule(...), ...}
-        self.rules = rules
+        self.rules = rule_id_to_rule
 
     def evaluate(self, handler, start_index=None, end_index=None, **runtime_params):
         realization = handler.realization
@@ -656,8 +688,23 @@ class RuleEngine:
 
 if __name__ == "__main__":
     from rule_functions import (
-        f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15,
+        f1,
+        f2,
+        f3,
+        f4,
+        f5,
+        f6,
+        f7,
+        f8,
+        f9,
+        f10,
+        f11,
+        f12,
+        f13,
+        f14,
+        f15,
     )
+
     rule_id_to_rule = {
         1: f1,
         2: f2,
@@ -675,7 +722,10 @@ if __name__ == "__main__":
         14: f14,
         15: f15,
     }
-    rb = Rulebook(rule_id_to_rule=rule_id_to_rule, rulebook_file="../reasonable_crowd/reasonable_crowd.graph")
+    rb = Rulebook(
+        rule_id_to_rule=rule_id_to_rule,
+        rulebook_file="../reasonable_crowd/reasonable_crowd.graph",
+    )
     rb.print_adjacency_matrix()
     rb.remove_rule(7)
     rb.print_adjacency_matrix()

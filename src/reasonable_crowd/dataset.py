@@ -72,6 +72,7 @@ def get_trajectories(output_directory, trajectory_directory, network_U, network_
             step_size=100000,
             max_workers=8,  # adjust depending on your CPU
         )
+        os.makedirs(output_directory, exist_ok=True)
         with open(os.path.join(output_directory, "trajectories.pkl"), "wb") as f:
             pickle.dump(trajectories, f)
 

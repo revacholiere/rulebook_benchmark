@@ -381,14 +381,24 @@ f1 = Rule(vru_collision, max, "vru_collision", 1)
 f2 = Rule(vehicle_collision, max, "vehicle_collision", 2)
 f3 = Rule(stay_in_drivable_area, max, "stay_in_drivable_area", 3)
 f4 = Rule(vru_ttc, max, "vru_ttc", 4, threshold=1.0)
-f5 = Rule(vru_acknowledgement, max, "vru_acknowledgement", 5, threshold=-1, timesteps=30, velocity=4)
+f5 = Rule(
+    vru_acknowledgement,
+    max,
+    "vru_acknowledgement",
+    5,
+    threshold=-1,
+    timesteps=30,
+    velocity=4,
+)
 f6 = Rule(vehicle_ttc, max, "vehicle_ttc", 6, threshold=0.8)
 f7 = Rule(correct_side, sum, "correct_side", 7, relax_at_intersections=True)
 f8 = Rule(vru_clearance, max, "vru_offroad_clearance", 8, on_road=False, threshold=1)
 f9 = Rule(vru_clearance, max, "vru_onroad_clearance", 9, on_road=True, threshold=1)
 f10 = Rule(front_clearance, max, "front_vehicle_clearance", 10, threshold=0.8)
 f11 = Rule(side_clearance, max, "left_vehicle_clearance", 11, left=True, threshold=0.8)
-f12 = Rule(side_clearance, max, "right_vehicle_clearance", 12, left=False, threshold=0.8)
+f12 = Rule(
+    side_clearance, max, "right_vehicle_clearance", 12, left=False, threshold=0.8
+)
 f13 = Rule(speed_limit, max, "speed_limit", 13, threshold=15)
 f14 = Rule(lane_keeping, sum, "lane_keeping", 14)
 f15 = Rule(lane_centering, sum, "lane_centering", 15, buffer=0.3)
@@ -396,12 +406,47 @@ f17 = Rule(jerk, sum, "jerk", 17)
 f18 = Rule(longitudinal_acceleration, max, "longitudinal_acceleration", 18)
 f19 = Rule(lateral_acceleration, max, "lateral_acceleration", 19)
 
-f7_alt = Rule(correct_side_alt, sum, "correct_side_alt", 7, relax_at_intersections=True, fine_grained=True)
+f7_alt = Rule(
+    correct_side_alt,
+    sum,
+    "correct_side_alt",
+    7,
+    relax_at_intersections=True,
+    fine_grained=True,
+)
 
 f10_sum = Rule(front_clearance, sum, "front_vehicle_clearance_sum", 10, threshold=0.8)
-f11_sum = Rule(side_clearance, sum, "left_vehicle_clearance_sum", 11, left=True, threshold=0.8)
-f12_sum = Rule(side_clearance, sum, "right_vehicle_clearance_sum", 12, left=False, threshold=0.8)
+f11_sum = Rule(
+    side_clearance, sum, "left_vehicle_clearance_sum", 11, left=True, threshold=0.8
+)
+f12_sum = Rule(
+    side_clearance, sum, "right_vehicle_clearance_sum", 12, left=False, threshold=0.8
+)
 
-f10_v = Rule(clearance_vector_based, max, "front_vehicle_clearance_vector", 10, threshold=0.8, side_angle=90, side="front")
-f11_v = Rule(clearance_vector_based, max, "left_vehicle_clearance_vector", 11, side="left", threshold=0.8, side_angle=90)
-f12_v = Rule(clearance_vector_based, max, "right_vehicle_clearance_vector", 12, side="right", threshold=0.8, side_angle=90)
+f10_v = Rule(
+    clearance_vector_based,
+    max,
+    "front_vehicle_clearance_vector",
+    10,
+    threshold=0.8,
+    side_angle=90,
+    side="front",
+)
+f11_v = Rule(
+    clearance_vector_based,
+    max,
+    "left_vehicle_clearance_vector",
+    11,
+    side="left",
+    threshold=0.8,
+    side_angle=90,
+)
+f12_v = Rule(
+    clearance_vector_based,
+    max,
+    "right_vehicle_clearance_vector",
+    12,
+    side="right",
+    threshold=0.8,
+    side_angle=90,
+)
