@@ -1310,7 +1310,7 @@ def generate_representative_scenario_specs_with_k_center(
                     vec, num_adv=num_vehicle_agents, num_ped=num_ped_agents
                 )
                 spec = {
-                    "scenario": f"basic_gen/representative{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
+                    "scenario": f"common/common{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
                     "map": "../../maps/Town05.xodr",
                     "ego": {
                         "type": AgentType.CAR,
@@ -1724,7 +1724,7 @@ def generate_representative_scenario_specs_with_k_center(
             for j, vec in enumerate(selected_scenarios):
                 ego_maneuver, advs = decode_scenario(vec, num_adv=num_vehicle_agents)
                 spec = {
-                    "scenario": f"basic_gen/representative{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
+                    "scenario": f"common/common{num_vehicle_agents}{num_ped_agents}_{j+1}.scenic",
                     "map": "../../maps/Town05.xodr",
                     "ego": {
                         "type": AgentType.CAR,
@@ -1746,27 +1746,27 @@ if __name__ == "__main__":
     # Below are example usages of the functions defined above.
 
     # Example: Generate representative scenario specs using k-center algorithm and save to a JSONL file
-    # generate_representative_scenario_specs_with_k_center(
-    #    jsonl_filename="basic_specs/representative_scenarios_21.jsonl",
-    #    num_vehicle_agents=2,
-    #    num_ped_agents=1,
-    #    num_scenarios=100
-    # )
+    #generate_representative_scenario_specs_with_k_center(
+    #   jsonl_filename="common_specs/common_scenarios_20.jsonl",
+    #   num_vehicle_agents=2,
+    #   num_ped_agents=0,
+    #   num_scenarios=100
+    #)
 
     # Example: Generate random scenario specs and save to a JSONL file
     # generate_random_scenario_specs(
-    #    jsonl_filename="basic_specs/basic_scenarios_20.jsonl",
+    #    jsonl_filename="common_specs/common_scenarios_20.jsonl",
     #    num_vehicle_agents=2,
     #    num_ped_agents=0,
     #    num_scenarios=50
     # )
 
     # Example: Generate Scenic programs from a JSONL file containing multiple specs
-    # generate_scenario_from_file('basic_specs/representative_scenarios_21.jsonl')
+    # generate_scenario_from_file('common_specs/common_scenarios_20.jsonl')
 
     # Example scenario spec
     # spec = {
-    #    'scenario': 'basic_gen/basic_test.scenic',
+    #    'scenario': 'test.scenic',
     #    'map': '../../maps/Town05.xodr',
     #    'ego': {
     #        'type': AgentType.CAR,
