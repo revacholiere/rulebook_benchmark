@@ -54,35 +54,3 @@ for scenario in "${scenarios_with_vru[@]}"; do
     fi
     echo "---------------------------------------------" | tee -a "$log_file"
 done
-
-# Using an array of indices for representative scenarios
-#indices=(
-#    1 2 3 4 5 
-#)
-#log_file="./outputs/representative21_ppo_eval.log"
-#base_path="../../scenarios/basic_gen"
-#prefix="representative21_"
-#extension=".scenic"
-#
-#for idx in "${indices[@]}"; do
-#    scenario="${base_path}/${prefix}${idx}${extension}"
-#    echo "Running scenario: ${scenario}"
-#
-#    timeout --preserve-status --signal SIGINT 1000s \
-#    python run_evaluation.py \
-#        --config-name=eval.yaml \
-#        hydra.job.chdir=False \
-#        hydra.output_subdir=null \
-#        scenic.file_path="${scenario}" \
-#        hydra.job_logging.handlers.file.filename="${log_file}"
-#
-#    exit_code=$?
-#    if [ $exit_code -eq 124 ]; then
-#        echo "⚠️ Scenario ${scenario} timed out after 1000s and was terminated." | tee -a "$log_file"
-#    elif [ $exit_code -ne 0 ]; then
-#        echo "❌ Scenario ${scenario} exited with error code ${exit_code}." | tee -a "$log_file"
-#    else
-#        echo "✅ Scenario ${scenario} completed successfully." | tee -a "$log_file"
-#    fi
-#    echo "---------------------------------------------" | tee -a "$log_file"
-#done

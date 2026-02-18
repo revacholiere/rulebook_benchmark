@@ -18,10 +18,10 @@ from scenic.core.simulators import Action
 from scenic.simulators.metadrive import MetaDriveSimulator
 from shapely.geometry import LineString, Point, Polygon
 
-from scenarios.run_scenic_test import visualize_simulation
+from scenarios.utils import visualize_simulation
 
 MAX_STEPS = 200
-METADRIVE_PPO_PATH = "assets/expert_weights.npz"
+METADRIVE_PPO_PATH = "assets/expert_weights.npz" # could be downloaded from https://github.com/metadriverse/metadrive/blob/main/metadrive/examples/ppo_expert/expert_weights.npz
 VERBOSITY = 1
 
 

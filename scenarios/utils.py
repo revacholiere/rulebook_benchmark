@@ -296,21 +296,3 @@ def visualize_simulation_points(
     ani.save(save_path, writer=writer)
     plt.close(fig)
     print(f"Video saved to {save_path}")
-
-
-if __name__ == "__main__":
-    scenario_to_ids = {
-        "nhtsa_intersection01": ["egoPoly", "advPoly", "egoLanePoly", "advLanePoly"],
-        "crash_cruise_032721-pdf": ["egoPoly", "advPoly", "egoLanePoly", "advLanePoly"],
-    }
-    scenario = "crash_cruise_032721-pdf"
-    simulation = run_metadrive_scenario(
-        f"{scenario.split('_')[0]}_gemini/{scenario}_gemini.scenic",
-        max_steps=MAX_STEPS,
-        seed=123,
-    )
-    # simulation = run_newtonian_scenario(f"{scenario}/{scenario}.scenic", max_steps=MAX_STEPS, seed=123)
-    ids = scenario_to_ids[scenario]
-
-    visualize_simulation(simulation, ids, truncate=0)
-    # visualize_simulation_points(simulation)

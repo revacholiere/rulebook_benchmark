@@ -94,6 +94,9 @@ class Rulebook:
                 # Node
                 if rule_section:
                     rule_id = int(line.strip())
+                    assert (
+                        rule_id in self.rule_id_to_rule
+                    ), f"Rule ID {rule_id} not found in the provided rule_id_to_rule dictionary."
                     rule = self.rule_id_to_rule[rule_id]
                     self.rule_ids.add(rule_id)
                     self.rule_id_to_node_id[rule_id] = rule_id
@@ -138,8 +141,10 @@ class Rulebook:
             if self.verbosity >= 2:
                 for id in self.priority_graph.nodes():
                     for rule_id in self.priority_graph.nodes[id]["rules"]:
-                        rule = self.rule_id_to_rule[rule_id]
-                        rule.print()
+                        rule = self.priority_graph.nodes[id]["rules"][rule_id]
+                        print(
+                            f"Node {id} contains rule {rule_id} with name: {rule.name}, rule function: {rule.calculate_violation}"
+                        )
                 print(f"Nodes: {self.priority_graph.nodes(data=True)}")
                 print(f"Edges: {self.priority_graph.edges()}")
 
@@ -147,13 +152,13 @@ class Rulebook:
         """
         Adds an isolated rule to the rulebook.
         """
-        rule_id = rule_object.id
-        if rule_id in self.rule_ids:
-            raise ValueError(f"Rule ID {rule_id} already exists in the rulebook.")
-        self.rule_ids.add(rule_id)
-        self.rule_id_to_node_id[rule_id] = rule_id
-        self.rule_id_to_rule[rule_id] = rule_object
-        self.priority_graph.add_node(rule_id, rules={rule_id})
+        id = rule_object.id
+        if id in self.rule_ids:
+            raise ValueError(f"Node ID {id} already exists in the rulebook.")
+        self.rule_ids.add(id)
+        self.rule_id_to_node_id[id] = id
+        self.rule_id_to_rule[id] = rule_object
+        self.priority_graph.add_node(id, rules={id: rule_object})
 
     def add_rule_relation(self, rule_id_1, rule_id_2, relation=Relation.LARGER):
         """
@@ -220,6 +225,8 @@ class Rulebook:
                     self.rule_id_to_node_id[id] = new_resp
         self.rule_ids.remove(rule_id)
         self.rule_id_to_node_id.pop(rule_id)
+        self.rule_name_to_rule_id.pop(self.rule_id_to_rule[rule_id].name)
+        self.rule_id_to_rule.pop(rule_id)
 
     def remove_rule_relation(self, rule_id_1, rule_id_2):
         """
@@ -514,7 +521,6 @@ class Rulebook:
             normalized_error_value (float): The normalized error value in [0, 1].
             violated_rules (list): A list of names of the violated rules.
         """
-        # TODO: fix this
         if self.verbosity >= 2:
             print(f"Results:")
             for rule_name, result in results.items():
@@ -522,10 +528,10 @@ class Rulebook:
         error_value = 0
         violated_rules = []
         for rule_name, result in results.items():
-            if rule_name not in self.name_to_id:
+            if rule_name not in self.get_rule_names():
                 continue
-            rule_id = self.name_to_id[rule_name]
-            node_id = self.rule_to_node_id[rule_id]
+            rule_id = self.rule_name_to_rule_id[rule_name]
+            node_id = self.rule_id_to_node_id[rule_id]
             if result.total_violation > 0:
                 error_value += 2 ** self.error_weight[node_id]
                 violated_rules.append(rule_name)
