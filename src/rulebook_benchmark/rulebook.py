@@ -36,6 +36,7 @@ class Rulebook:
         self.priority_graph = nx.DiGraph()
         self.rule_ids = set()
         self.rule_id_to_rule = {}
+        self.rule_name_to_rule_id = {rule.name: rule_id for rule_id, rule in rule_id_to_rule.items()}
         for rule_id, rule in rule_id_to_rule.items():
             self.rule_id_to_rule[rule_id] = rule.copy()
         self.rule_id_to_node_id = (
@@ -158,6 +159,7 @@ class Rulebook:
         self.rule_ids.add(rule_id)
         self.rule_id_to_node_id[rule_id] = rule_id
         self.rule_id_to_rule[rule_id] = rule_object
+        self.rule_name_to_rule_id[rule_object.name] = rule_id
         self.priority_graph.add_node(rule_id, rules={rule_id})
 
     def add_rule_relation(self, rule_id_1, rule_id_2, relation=Relation.LARGER):
@@ -250,7 +252,7 @@ class Rulebook:
         names = []
         for node in self.priority_graph.nodes():
             for rule_id in self.priority_graph.nodes[node]["rules"]:
-                names.append(self.priority_graph.nodes[node]["rules"][rule_id].name)
+                names.append(self.rule_id_to_rule[rule_id].name)
         return names
 
     def get_rule_relation(self, rule_id_1, rule_id_2, to_print=False):
