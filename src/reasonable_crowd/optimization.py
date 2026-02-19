@@ -23,7 +23,7 @@ def cache_rule_evaluations(
     trajectories_dict,
     verbose=False,
 ):
-
+    default_config = rbook.get_config()
     rule_id_to_rule = rbook.rule_id_to_rule
     pbar = tqdm(
         total=len(rule_id_to_rule), desc="Caching rule evaluations", leave=False
@@ -60,6 +60,7 @@ def cache_rule_evaluations(
 
         pbar.update(1)
 
+    rbook.apply_config(default_config)  # reset to default after caching
     pbar.close()
 
 
@@ -173,6 +174,7 @@ def optimize_rulebook_greedy_by_priority(
             break
 
     # print(best_config)
+    rulebook.apply_config(best_config)
     return best_config, best_train_score
 
 
