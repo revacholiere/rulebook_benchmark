@@ -169,32 +169,12 @@ group_to_name = {tuple(value): key for key, value in name_to_group.items()}
 rulebook = group_rulebook(rulebook, groups, keep_relations=True)
 
 
-base_result = evaluate_rulebook_with_cache(
-    rulebook, X, y, y_votes, cache_dict, trajectories_dict
-)
-print()
-print("Base Rulebook Results:")
-print("----------------------")
-print("Correct:", base_result[0])
-print("Equal:", base_result[1])
-print("Incomparable:", base_result[2])
-print("Total:", base_result[3])
-print("Accuracy:", base_result[4])
-print("Weighted Accuracy:", base_result[5])
-print(
-    "Accuracy out of predictions:",
-    (
-        base_result[0] / (base_result[3] - base_result[2])
-        if base_result[3] - base_result[2] > 0
-        else 0.0
-    ),
-)
-print("\n")
-
-
 accuracy_list = []
-weighted_accuracy_list = []
 correct_list = []
+
+
+base_accuracy_list = []
+base_correct_list = []
 
 
 for run in range(NUM_RUNS):
@@ -221,6 +201,22 @@ for run in range(NUM_RUNS):
         X_test = [X[i] for i in test_index]
         y_test = [y[i] for i in test_index]
         votes_test = [votes[i] for i in test_index]
+        # Evaluate on test fold with default config
+        (
+            correct,
+            equal,
+            incomparable,
+            total,
+            accuracy,
+            weighted_accuracy,
+            reasons,
+            predictions,
+        ) = evaluate_rulebook_with_cache(
+            rulebook, X_test, y_test, votes_test, cache_dict, trajectories_dict
+        )
+
+        base_correct_list.append(correct)
+        base_accuracy_list.append(accuracy)
 
         # if cached best config for this fold exists, load it
         if os.path.exists(
@@ -282,7 +278,6 @@ for run in range(NUM_RUNS):
 
         correct_list.append(correct)
         accuracy_list.append(accuracy)
-        weighted_accuracy_list.append(weighted_accuracy)
 
         fold += 1
 
@@ -293,17 +288,22 @@ for run in range(NUM_RUNS):
 avg_correct = np.mean(correct_list)
 avg_accuracy = np.mean(accuracy_list)
 std_dev_accuracy = np.std(accuracy_list)
-avg_weighted_accuracy = np.mean(weighted_accuracy_list)
-std_dev_weighted_accuracy = np.std(weighted_accuracy_list)
+
+avg_base_correct = np.mean(base_correct_list)
+avg_base_accuracy = np.mean(base_accuracy_list)
+std_dev_base_accuracy = np.std(base_accuracy_list)
 
 
 print(f"5-Fold Cross-Validation Results for run {run}, seed {SEED}:")
 print("----------------------")
 print("Average Correct:", avg_correct)
 print("Average Accuracy:", avg_accuracy)
-print("Average Weighted Accuracy:", avg_weighted_accuracy)
 print("Std Dev Accuracy:", std_dev_accuracy)
-print("Std Dev Weighted Accuracy:", std_dev_weighted_accuracy)
+
+print("\nBaseline (Default Config) Results:")
+print("Average Correct:", avg_base_correct)
+print("Average Accuracy:", avg_base_accuracy)
+print("Std Dev Accuracy:", std_dev_base_accuracy)
 
 print("\n")
 
@@ -332,13 +332,13 @@ greedy_rulebooks, num_unique_rulebooks, correct, accuracy, scenario_to_samples =
         trajectories_dict,
         greedy_group_optimization,
         groups,
-        max_iters=1,
-        restricted=False,
+        max_iters=2,
+        restricted=True,
         fixed_level_depth=0,
     )
 )
 # print results
-print("Greedy Group Optimization (max_iters=1):")
+print("Greedy Group Optimization (max_iters=2):")
 print(f"Number of unique rulebooks found: {num_unique_rulebooks}")
 print(f"Correct classifications: {correct} out of {len(y)}")
 print(f"Accuracy: {accuracy:.4f}")
@@ -681,15 +681,6 @@ print("Equal:", base_result[1])
 print("Incomparable:", base_result[2])
 print("Total:", base_result[3])
 print("Accuracy:", base_result[4])
-print("Weighted Accuracy:", base_result[5])
-print(
-    "Accuracy out of predictions:",
-    (
-        base_result[0] / (base_result[3] - base_result[2])
-        if base_result[3] - base_result[2] > 0
-        else 0.0
-    ),
-)
 
 
 base_result_alt = evaluate_rulebook_with_cache(
@@ -702,15 +693,7 @@ print("Equal:", base_result_alt[1])
 print("Incomparable:", base_result_alt[2])
 print("Total:", base_result_alt[3])
 print("Accuracy:", base_result_alt[4])
-print("Weighted Accuracy:", base_result_alt[5])
-print(
-    "Accuracy out of predictions:",
-    (
-        base_result_alt[0] / (base_result_alt[3] - base_result_alt[2])
-        if base_result_alt[3] - base_result_alt[2] > 0
-        else 0.0
-    ),
-)
+
 
 base_result_sum = evaluate_rulebook_with_cache(
     rulebook_sum, X, y, y_votes, sum_cache_dict, trajectories_dict
@@ -722,15 +705,6 @@ print("Equal:", base_result_sum[1])
 print("Incomparable:", base_result_sum[2])
 print("Total:", base_result_sum[3])
 print("Accuracy:", base_result_sum[4])
-print("Weighted Accuracy:", base_result_sum[5])
-print(
-    "Accuracy out of predictions:",
-    (
-        base_result_sum[0] / (base_result_sum[3] - base_result_sum[2])
-        if base_result_sum[3] - base_result_sum[2] > 0
-        else 0.0
-    ),
-)
 
 
 base_result_side = evaluate_rulebook_with_cache(
@@ -744,15 +718,6 @@ print("Equal:", base_result_side[1])
 print("Incomparable:", base_result_side[2])
 print("Total:", base_result_side[3])
 print("Accuracy:", base_result_side[4])
-print("Weighted Accuracy:", base_result_side[5])
-print(
-    "Accuracy out of predictions:",
-    (
-        base_result_side[0] / (base_result_side[3] - base_result_side[2])
-        if base_result_side[3] - base_result_side[2] > 0
-        else 0.0
-    ),
-)
 
 f7_alt.parameters["fine_grained"] = False
 
@@ -766,16 +731,6 @@ print("Equal:", base_result_side_not_fg[1])
 print("Incomparable:", base_result_side_not_fg[2])
 print("Total:", base_result_side_not_fg[3])
 print("Accuracy:", base_result_side_not_fg[4])
-print("Weighted Accuracy:", base_result_side_not_fg[5])
-print(
-    "Accuracy out of predictions:",
-    (
-        base_result_side_not_fg[0]
-        / (base_result_side_not_fg[3] - base_result_side_not_fg[2])
-        if base_result_side_not_fg[3] - base_result_side_not_fg[2] > 0
-        else 0.0
-    ),
-)
 
 
 def compare_preds(name, base_res, other_res):
