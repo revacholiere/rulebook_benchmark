@@ -131,7 +131,6 @@ rule_id_to_values = {
 default_params = {}
 for rule_id, rule in rule_id_to_rule.items():
     default_params[rule_id] = deepcopy(rule.parameters)
-    print(f"Rule {rule_id} default parameters: {rule.parameters}")
 
 if os.path.exists(os.path.join(output_directory, "tuning_cache.pkl")):
     print("Loading cached rule evaluations...")
@@ -476,6 +475,13 @@ rulebook = Rulebook(rule_id_to_rule, rulebook_file)
 rulebook_alt = Rulebook(rule_id_to_rule_alt, rulebook_file)
 rulebook_side = Rulebook(rule_id_to_rule_side, rulebook_file)
 rulebook_sum = Rulebook(rule_id_to_rule_sum, rulebook_file)
+
+default_params = rulebook.get_config()
+alt_params = rulebook_alt.get_config()
+side_params = rulebook_side.get_config()
+sum_params = rulebook_sum.get_config()
+
+
 rule_id_to_params = {
     4: ["threshold"],
     6: ["threshold"],
@@ -647,6 +653,12 @@ else:
         open(os.path.join(output_directory, "sum_tuning_cache.pkl"), "wb"),
     )
 
+rulebook.apply_config(default_params)
+rulebook_alt.apply_config(alt_params)
+rulebook_side.apply_config(side_params)
+rulebook_sum.apply_config(sum_params)
+
+
 groups = [[1, 2], [3, 7], [8, 9, 10, 11, 12], [14, 15, 13], [4, 6, 5]]
 name_to_group = {
     "safety-critical": groups[0],
@@ -662,6 +674,7 @@ rulebook = group_rulebook(rulebook, groups, keep_relations=True)
 base_result = evaluate_rulebook_with_cache(
     rulebook, X, y, y_votes, cache_dict, trajectories_dict
 )
+print("====================================")
 print("Base Rulebook Results:")
 print("Correct:", base_result[0])
 print("Equal:", base_result[1])
@@ -682,8 +695,8 @@ print(
 base_result_alt = evaluate_rulebook_with_cache(
     rulebook_alt, X, y, y_votes, alt_cache_dict, trajectories_dict
 )
-
-print("Alternative Rulebook Results with front_angle=90")
+print("====================================")
+print("Clearance - Heading Rulebook Results with front_angle=90")
 print("Correct:", base_result_alt[0])
 print("Equal:", base_result_alt[1])
 print("Incomparable:", base_result_alt[2])
@@ -702,8 +715,8 @@ print(
 base_result_sum = evaluate_rulebook_with_cache(
     rulebook_sum, X, y, y_votes, sum_cache_dict, trajectories_dict
 )
-
-print("Sum Rulebook Results")
+print("====================================")
+print("Clearance - Sum (Instead of max) Rulebook Results")
 print("Correct:", base_result_sum[0])
 print("Equal:", base_result_sum[1])
 print("Incomparable:", base_result_sum[2])
@@ -724,8 +737,8 @@ base_result_side = evaluate_rulebook_with_cache(
     rulebook_side, X, y, y_votes, side_cache_dict, trajectories_dict
 )
 
-
-print("Side Rulebook Results")
+print("====================================")
+print("Correct Side - Centroid Rulebook Results")
 print("Correct:", base_result_side[0])
 print("Equal:", base_result_side[1])
 print("Incomparable:", base_result_side[2])
@@ -746,8 +759,8 @@ f7_alt.parameters["fine_grained"] = False
 base_result_side_not_fg = evaluate_rulebook_with_cache(
     rulebook_side, X, y, y_votes, side_cache_dict, trajectories_dict
 )
-
-print("Side Rulebook Results with fine_grained=False")
+print("====================================")
+print("Correct Side - Centroid Rulebook Results with fine_grained=False")
 print("Correct:", base_result_side_not_fg[0])
 print("Equal:", base_result_side_not_fg[1])
 print("Incomparable:", base_result_side_not_fg[2])
@@ -776,7 +789,7 @@ def compare_preds(name, base_res, other_res):
     diffs_reasons = [i for i in range(n) if base_reasons[i] != other_reasons[i]]
     diffs_reasons_only = [i for i in diffs_reasons if i not in diffs_preds]
 
-    print(f"\n=== base vs {name} ===")
+    print(f"\n=== Base vs {name} ===")
     print(f"Compared examples: {n}")
     print(
         f"Prediction changes: {len(diffs_preds)} ({(len(diffs_preds)/n*100) if n>0 else 0:.2f}%)"
@@ -828,7 +841,9 @@ def compare_preds(name, base_res, other_res):
 
 
 # Run comparisons
-compare_preds("alternative", base_result, base_result_alt)
-compare_preds("sum", base_result, base_result_sum)
-compare_preds("side", base_result, base_result_side)
-compare_preds("side_not_fine_grained", base_result, base_result_side_not_fg)
+compare_preds("Clearance - Heading", base_result, base_result_alt)
+compare_preds("Clearance - Sum", base_result, base_result_sum)
+compare_preds("Correct Side - Centroid", base_result, base_result_side)
+compare_preds(
+    "Correct Side - Centroid (fine_grained=False)", base_result, base_result_side_not_fg
+)

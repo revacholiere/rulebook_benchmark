@@ -1,7 +1,7 @@
 import ast
 from collections import defaultdict
+from copy import deepcopy
 from enum import Enum
-from logging import config
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -547,7 +547,7 @@ class Rulebook:
     def get_config(self):
         config = {}
         for rule_id, rule in self.rule_id_to_rule.items():
-            config[rule_id] = rule.parameters
+            config[rule_id] = deepcopy(rule.parameters)
         return config
 
 
@@ -581,9 +581,7 @@ class Rule:
 
     def copy(self):
         # copy parameters
-        new_params = {}
-        for key, value in self.parameters.items():
-            new_params[key] = value
+        new_params = deepcopy(self.parameters)
         return Rule(
             self.calculate_violation,
             self.aggregation_method,
