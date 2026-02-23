@@ -653,10 +653,10 @@ else:
         open(os.path.join(output_directory, "sum_tuning_cache.pkl"), "wb"),
     )
 
-rulebook.apply_config(default_params)
-rulebook_alt.apply_config(alt_params)
-rulebook_side.apply_config(side_params)
-rulebook_sum.apply_config(sum_params)
+# rulebook.apply_config(default_params)
+# rulebook_alt.apply_config(alt_params)
+# rulebook_side.apply_config(side_params)
+# rulebook_sum.apply_config(sum_params)
 
 
 groups = [[1, 2], [3, 7], [8, 9, 10, 11, 12], [14, 15, 13], [4, 6, 5]]
