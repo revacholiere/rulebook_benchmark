@@ -5,6 +5,65 @@ We collect two types of scenarios in this benchmark: **common scenarios** and **
 
 Common Scenarios
 ---
+### Automated Scenic Program Generator
+
+We develop an automated Scenic program generator. By defining the map, the ego vehicle's behavior, and the attributes of surrounding agents (types, maneuvers, strategies, and spatial relations) in a JSON-like dictionary, the generator outputs a fully executable Scenic program. 
+
+Here is an example scenario specification:
+```python
+spec = {
+    'scenario': 'test.scenic',
+    'map': '../../maps/Town05.xodr',
+    'ego': {
+        'type': AgentType.CAR,
+        'maneuver': VehicleManeuver.RIGHT_TURN,
+    },
+    'agents': {
+        'agent1': {
+            'type': AgentType.CAR,
+            'maneuver': VehicleManeuver.LANE_FOLLOWING,
+            'strategy': 'conservative',
+            'spatial_relation': SpatialRelation.FASTER_LANE,
+        },
+        'agent2': {
+            'type': AgentType.CAR,
+            'maneuver': VehicleManeuver.LANE_FOLLOWING,
+            'strategy': 'aggressive',
+            'spatial_relation': SpatialRelation.AHEAD_OF,
+        },
+        'agent3': {
+            'type': AgentType.PEDESTRIAN,
+            'maneuver': PedestrianManeuver.CROSS_STREET,
+            'spatial_relation': PedestrianSpatialRelation.SIDEWALK,
+        },
+    }
+}
+```
+
+For complete implementation details, please refer to `auto_scenario_generator.py`.
+
+### Generating Scenario Specs
+
+To create a diverse set of scenarios, we provide a pipeline to automatically generate specifications using either a k-Center greedy algorithm or a random sampling approach. The pipeline outputs a `.jsonl` file containing the generated specs.
+
+To execute the script, using the following command:
+```bash
+python auto_scenario_generator.py generate_spec -f <FILE_NAME> [-v NUM_VEHICLES] [-p NUM_PED_AGENTS] [-n NUM_SCENARIOS] [-m {k_center,random}]
+```
+- -f: The output file name for the generated specifications (`*.jsonl`).
+- -v: The number of surrounding vehicles to include.
+- -p: The number of pedestrian agents to include.
+- -n: The total number of scenario specifications to generate.
+- -m: The generation method to use (`k_center` or `random`).
+
+### Generating Scenic Program from Specs
+
+Once you have generated your scenario specifications, you can compile them into executable Scenic programs using the following command:
+```bash
+python auto_scenario_generator.py generate_scenarios -f <FILE_NAME>
+```
+This will parse the specifications in your .jsonl file and output the corresponding `.scenic` program files.
+
 
 Near-Accident Scenarios
 ---
