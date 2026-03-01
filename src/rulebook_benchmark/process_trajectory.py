@@ -230,8 +230,9 @@ def secondPass(obj, ambiguous_lanes, network, isScenic=False):
 
 
 def process_trajectory(
-    realization, isScenic=False
+    realization,
 ):  # given a realization, extract the sequence of lanes followed by each vehicle
+    isScenic = realization.isScenic
     network = realization.network
     objects = realization.objects
 

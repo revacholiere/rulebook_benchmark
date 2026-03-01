@@ -5,7 +5,7 @@ import numpy as np
 import shapely
 from cached_property import cached_property
 
-from rulebook_benchmark.utils import in_proximity, intersects, polygon_distance
+from rulebook_benchmark.utils import intersects, polygon_distance
 
 DELTA = 0.1
 
@@ -17,7 +17,7 @@ class Realization:
         self.ego_index = ego_index
         self.delta = delta
         self.proximity_threshold = proximity_threshold
-        self.isScenic = False
+        self.isScenic = True
 
     def __len__(self):
         return len(self.objects[self.ego_index].trajectory)
@@ -314,7 +314,7 @@ class VariablePool:
         self.world_state = self.realization.get_world_state(step)
         self.ego = self.realization.ego
         self.ego_state = self.world_state.ego_state
-        self.other_vehicle_states = self.world_state.other_vehicle_states
+        self.vehicle_states = self.world_state.other_vehicle_states
         self.vru_states = self.world_state.vru_states
         self.proximity_threshold = proximity_threshold
         self._distances = {}
@@ -331,6 +331,18 @@ class VariablePool:
             if intersects(self.ego_state, state):
                 colliding[state.uid] = state
         return colliding
+
+    def in_proximity(self, ego_state, object_states, threshold):
+        if len(object_states) == 0:
+            return []
+        ego = ego_state.object
+        radius = ego.radius + threshold
+        ego_pos = ego_state.position
+        adv_positions = np.array([v.position for v in object_states])
+        adv_radii = np.array([v.object.radius for v in object_states])
+        distances = np.linalg.norm(adv_positions - ego_pos, axis=1)
+        mask = distances <= (radius + adv_radii)
+        return [v for v, m in zip(object_states, mask) if m]
 
     def distance(self, other_state):
         uid = other_state.uid
@@ -358,13 +370,15 @@ class VariablePool:
 
     @cached_property
     def vehicles_in_proximity(self):
-        return in_proximity(
-            self.ego_state, self.other_vehicle_states, self.proximity_threshold
+        return self.in_proximity(
+            self.ego_state, self.vehicle_states, self.proximity_threshold
         )
 
     @cached_property
     def vrus_in_proximity(self):
-        return in_proximity(self.ego_state, self.vru_states, self.proximity_threshold)
+        return self.in_proximity(
+            self.ego_state, self.vru_states, self.proximity_threshold
+        )
 
     @cached_property
     def trajectory_linestring(self):

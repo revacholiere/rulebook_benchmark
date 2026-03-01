@@ -135,7 +135,7 @@ class ReasonableCrowdTrajectoryParser:
         self.objects = objects
 
     def create_realization(self):
-        realization = Realization()
+        realization = Realization(isScenic=False)
         realization.objects = self.objects
         return realization
 
