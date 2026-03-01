@@ -11,13 +11,13 @@ DELTA = 0.1
 
 
 class Realization:
-    def __init__(self, ego_index=0, delta=DELTA, proximity_threshold=3):
+    def __init__(self, ego_index=0, delta=DELTA, proximity_threshold=3, isScenic=True):
         self.network = None
         self.objects = None
         self.ego_index = ego_index
         self.delta = delta
         self.proximity_threshold = proximity_threshold
-        self.isScenic = True
+        self.isScenic = isScenic
 
     def __len__(self):
         return len(self.objects[self.ego_index].trajectory)

@@ -36,7 +36,9 @@ class Rulebook:
         self.priority_graph = nx.DiGraph()
         self.rule_ids = set()
         self.rule_id_to_rule = {}
-        self.rule_name_to_rule_id = {rule.name: rule_id for rule_id, rule in rule_id_to_rule.items()}
+        self.rule_name_to_rule_id = {
+            rule.name: rule_id for rule_id, rule in rule_id_to_rule.items()
+        }
         for rule_id, rule in rule_id_to_rule.items():
             self.rule_id_to_rule[rule_id] = rule.copy()
         self.rule_id_to_node_id = (
@@ -281,7 +283,7 @@ class Rulebook:
             print(f"Rule {rule_id_1} and Rule {rule_id_2} are non-comparable.")
         return Relation.NONCOMPARABLE
 
-    def visualize_rulebook(self, output_file_name="merged_rule_graph.png"):
+    def visualize_rulebook(self, output_file_name="merged_rule_graph.png", save=True):
         ranks = {}
         for node in nx.topological_sort(self.priority_graph):
             preds = list(self.priority_graph.predecessors(node))
@@ -315,7 +317,8 @@ class Rulebook:
             arrows=True,
         )
         plt.title("Rulebook Graph with Same-Level Nodes Merged")
-        plt.savefig(output_file_name)
+        if save:
+            plt.savefig(output_file_name)
         plt.show()
 
     def get_adjecency_list(self):
