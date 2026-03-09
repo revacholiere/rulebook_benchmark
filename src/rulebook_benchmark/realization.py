@@ -71,7 +71,8 @@ class Realization:
     def vehicles(self):
         vehicles = []
         for obj in self.objects:
-            if obj.object_type == "Car" or obj.object_type == "Truck":
+            # match with regex to see if it ends with "Car" or "Truck" to be more robust to different naming conventions
+            if obj.object_type.endswith("Car") or obj.object_type.endswith("Truck"):
                 vehicles.append(obj)
         return vehicles
 
@@ -83,7 +84,9 @@ class Realization:
     def vrus(self):
         VRUs = []
         for obj in self.objects:
-            if obj.object_type == "Pedestrian" or obj.object_type == "Bicycle":
+            if obj.object_type.endswith("Pedestrian") or obj.object_type.endswith(
+                "Bicycle"
+            ):
                 VRUs.append(obj)
         return VRUs
 

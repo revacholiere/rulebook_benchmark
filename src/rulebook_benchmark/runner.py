@@ -24,11 +24,11 @@ def run_scenic_metadrive(
     scenario = scenarioFromFile(
         scenic_path,
         params={"realization": realization},
-        # model="scenic.simulators.metadrive.model",
+        model="scenic.simulators.metadrive.model",
         mode2D=True,
     )
     scene, _ = scenario.generate()
-    simulator = MetaDriveSimulator(sumo_map=scenario.params["map"], render=render)
+    simulator = MetaDriveSimulator(sumo_map=scenario.params["sumo_map"], render=render)
     simulation = simulator.simulate(scene, maxSteps=max_steps)
-    process_trajectory(simulation)
+    process_trajectory(realization)
     return realization
