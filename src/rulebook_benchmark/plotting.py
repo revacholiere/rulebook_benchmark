@@ -682,7 +682,9 @@ def animate_trajectory_with_violations(
 
         if label_state["use_matplotx"]:
             try:
-                matplotx.line_labels(ax=ax_viol, gid=line_label_gid)
+                matplotx.line_labels(
+                    ax=ax_viol, gid=line_label_gid, rotation=45, fontsize=8
+                )
             except Exception:
                 label_state["use_matplotx"] = False
                 if ax_viol.get_legend() is None:

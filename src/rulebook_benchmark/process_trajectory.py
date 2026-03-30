@@ -252,14 +252,3 @@ def process_trajectory(
 def get_possible_lanes(shapely_obj, tree, lanes):
     indices = tree.query(shapely_obj, predicate="intersects")
     return [lanes[ind] for ind in indices]
-
-
-def process_trajectory_old(realization):
-    network = realization.network
-    objects = realization.objects
-    for obj in objects:
-        for i in range(len(obj.trajectory)):
-            state = obj.get_state(i)
-            state.lane = network.laneAt(state.position)
-            # if state.lane is None:
-            #    print(f"Object {obj.object_type} {obj.mesh} is out of road at step {i}")
