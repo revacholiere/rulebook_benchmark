@@ -467,7 +467,7 @@ def animate_trajectory_with_violations(
         Animation object that can be saved or displayed.
     """
     fig, (ax_traj, ax_viol) = plt.subplots(1, 2, figsize=(14, 6), dpi=dpi)
-
+    fig.subplots_adjust(right=0.85)
     colors = {
         "Car": "blue",
         "Truck": "yellow",
@@ -673,7 +673,7 @@ def animate_trajectory_with_violations(
             line.set_data(x_data, y_data)
 
         # Update x-axis to follow current frame
-        ax_viol.set_xlim(0, max(current_step + 1, 5))
+        #ax_viol.set_xlim(0, max(current_step + 1, 5))
 
         # Refresh line-end labels after data is available.
         for txt in list(ax_viol.texts):
